@@ -10,7 +10,8 @@
     "test": "vitest run",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "deploy": "npm run build && wrangler deploy"
+    "deploy:staging": "npm run build && wrangler deploy --env staging",
+    "deploy:production": "npm run build && wrangler deploy --env=\"\""
   },
   "dependencies": {
     "matter-js": "^0.20.0"

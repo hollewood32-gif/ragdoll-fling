@@ -1,10 +1,17 @@
 // Cloudflare Workers configuration ("infrastructure as code").
-// `npx wrangler deploy` reads this file and makes Cloudflare match it.
+// `wrangler deploy` reads this file and makes Cloudflare match it.
+//
+// Two environments:
+//   production (the top level)  -> Worker "fling"         at fling.jeffreydoughty.com
+//   staging    (env.staging)    -> Worker "fling-staging" at fling-staging.jeffreydoughty.com
+// Deploy staging with `wrangler deploy --env staging`.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
 
-  // The Worker's name in your Cloudflare account. It also gives the free
-  // address: https://fling.<your-account>.workers.dev
+  // Which Cloudflare account to deploy to. An ID, not a secret.
+  "account_id": "1fffec26e09010f5be9bf9332b2b8e03",
+
+  // The production Worker's name in the Cloudflare account.
   "name": "fling",
 
   // Locks in which version of the Workers runtime behavior we get,
@@ -17,12 +24,29 @@
     "directory": "./dist"
   },
 
-  // Keep the free *.workers.dev address switched on.
+  // Production keeps its backup address https://fling.ragdoll-fling.workers.dev,
+  // but doesn't make per-version preview links (those belong to staging).
   "workers_dev": true,
+  "preview_urls": false,
 
-  // Serve the game on our own subdomain. Because jeffreydoughty.com's DNS is on
+  // Serve production on our own subdomain. Because jeffreydoughty.com's DNS is on
   // Cloudflare, deploying creates the DNS record and HTTPS certificate for us.
   "routes": [
     { "pattern": "fling.jeffreydoughty.com", "custom_domain": true }
-  ]
+  ],
+
+  "env": {
+    "staging": {
+      // Wrangler names this Worker "fling-staging" automatically.
+      "workers_dev": true,
+
+      // Each pull request uploads a version here with its own preview link,
+      // like https://pr-4-fling-staging.ragdoll-fling.workers.dev
+      "preview_urls": true,
+
+      "routes": [
+        { "pattern": "fling-staging.jeffreydoughty.com", "custom_domain": true }
+      ]
+    }
+  }
 }

@@ -1,0 +1,113 @@
+# CI: runs on every pull request into main.
+#   1. "checks": lint, type-check, tests and build. Must pass before merging.
+#   2. "preview": uploads the build as a preview version of the staging Worker
+#      and comments the link on the pull request, so the change can be played.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+# A newer push to the same PR cancels the older, now-outdated run.
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v7
+
+      - name: Install Node.js (version from .nvmrc)
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install exact dependency versions from package-lock.json
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Save the build for the preview job
+        uses: actions/upload-artifact@v7
+        with:
+          name: site
+          path: dist
+          retention-days: 7
+
+  preview:
+    name: preview
+    needs: checks
+    # Pull requests from forks can't use this repo's secrets, so skip them.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write # to comment the preview link
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - name: Get the build from the checks job
+        uses: actions/download-artifact@v8
+        with:
+          name: site
+          path: dist
+
+      - name: Upload a preview version (doesn't change what staging serves)
+        id: upload
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          npx wrangler versions upload --env staging \
+            --preview-alias "pr-${PR_NUMBER}" \
+            --message "PR #${PR_NUMBER} (${SHA::7})" | tee wrangler-output.txt
+          url=$(grep -oE "https://pr-${PR_NUMBER}-[a-z0-9.-]+\.workers\.dev" wrangler-output.txt | head -n 1)
+          if [ -z "$url" ]; then
+            echo "Could not find the preview URL in Wrangler's output" >&2
+            exit 1
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Comment the preview link on the pull request
+        uses: actions/github-script@v9
+        env:
+          PREVIEW_URL: ${{ steps.upload.outputs.url }}
+        with:
+          script: |
+            const marker = "<!-- preview-link -->";
+            const body = `${marker}\n🎮 **Play this change:** ${process.env.PREVIEW_URL}\n\nUpdated for commit ${context.payload.pull_request.head.sha.slice(0, 7)}.`;
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
+            const existing = comments.find((c) => c.body?.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
