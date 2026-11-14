@@ -18,5 +18,11 @@
   },
 
   // Keep the free *.workers.dev address switched on.
-  "workers_dev": true
+  "workers_dev": true,
+
+  // Serve the game on our own subdomain. Because jeffreydoughty.com's DNS is on
+  // Cloudflare, deploying creates the DNS record and HTTPS certificate for us.
+  "routes": [
+    { "pattern": "fling.jeffreydoughty.com", "custom_domain": true }
+  ]
 }
