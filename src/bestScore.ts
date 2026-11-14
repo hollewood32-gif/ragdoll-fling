@@ -2,7 +2,9 @@
 // Storage can be missing or blocked (some private browsing modes), so every
 // access is wrapped in try/catch and the game keeps working without it.
 
-const STORAGE_KEY = "ragdoll-fling:best-score";
+// The "-v2" resets everyone's best score. Bump the version whenever a scoring
+// change makes old records unfair (v2: held hits now score 25%).
+export const STORAGE_KEY = "ragdoll-fling:best-score-v2";
 
 /** The two localStorage methods we use. Tests pass a fake with the same shape. */
 export interface ScoreStorage {

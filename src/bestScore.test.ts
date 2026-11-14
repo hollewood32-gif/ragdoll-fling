@@ -1,7 +1,7 @@
 // Tests for best-score memory. Run with: npm test
 
 import { describe, expect, it } from "vitest";
-import { loadBestScore, recordScore, type ScoreStorage } from "./bestScore";
+import { loadBestScore, recordScore, STORAGE_KEY, type ScoreStorage } from "./bestScore";
 
 /** A pretend localStorage that keeps values in memory. */
 function fakeStorage(initial: Record<string, string> = {}): ScoreStorage & { data: Record<string, string> } {
@@ -31,12 +31,16 @@ describe("loadBestScore", () => {
   });
 
   it("reads a saved score", () => {
-    expect(loadBestScore(fakeStorage({ "ragdoll-fling:best-score": "4460" }))).toBe(4460);
+    expect(loadBestScore(fakeStorage({ [STORAGE_KEY]: "4460" }))).toBe(4460);
+  });
+
+  it("ignores best scores saved under the old scoring rules", () => {
+    expect(loadBestScore(fakeStorage({ "ragdoll-fling:best-score": "498549" }))).toBe(0);
   });
 
   it("treats garbage or negative values as 0", () => {
-    expect(loadBestScore(fakeStorage({ "ragdoll-fling:best-score": "banana" }))).toBe(0);
-    expect(loadBestScore(fakeStorage({ "ragdoll-fling:best-score": "-50" }))).toBe(0);
+    expect(loadBestScore(fakeStorage({ [STORAGE_KEY]: "banana" }))).toBe(0);
+    expect(loadBestScore(fakeStorage({ [STORAGE_KEY]: "-50" }))).toBe(0);
   });
 
   it("is 0 when storage is missing or blocked", () => {
@@ -53,7 +57,7 @@ describe("recordScore", () => {
   });
 
   it("keeps the old best when the score is lower or equal", () => {
-    const storage = fakeStorage({ "ragdoll-fling:best-score": "500" });
+    const storage = fakeStorage({ [STORAGE_KEY]: "500" });
     expect(recordScore(storage, 300, 500)).toEqual({ best: 500, isNewBest: false });
     expect(recordScore(storage, 500, 500)).toEqual({ best: 500, isNewBest: false });
     expect(loadBestScore(storage)).toBe(500);
