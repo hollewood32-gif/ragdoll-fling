@@ -137,6 +137,13 @@ canvas:active {
   font-size: clamp(12px, 3cqh, 18px);
 }
 
+.overlay .coin-line {
+  margin-bottom: 1.3cqh;
+  color: #ffd166;
+  font-weight: 700;
+  font-size: clamp(12px, 3cqh, 18px);
+}
+
 .overlay .best-line[hidden] {
   display: none;
 }

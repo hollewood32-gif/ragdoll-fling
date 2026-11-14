@@ -1,7 +1,7 @@
 // Tests for best-score memory. Run with: npm test
 
 import { describe, expect, it } from "vitest";
-import { loadBestScore, recordScore, STORAGE_KEY, type ScoreStorage } from "./bestScore";
+import { loadBestScore, PURE_STORAGE_KEY, recordScore, STORAGE_KEY, type ScoreStorage } from "./bestScore";
 
 /** A pretend localStorage that keeps values in memory. */
 function fakeStorage(initial: Record<string, string> = {}): ScoreStorage & { data: Record<string, string> } {
@@ -32,6 +32,14 @@ describe("loadBestScore", () => {
 
   it("reads a saved score", () => {
     expect(loadBestScore(fakeStorage({ [STORAGE_KEY]: "4460" }))).toBe(4460);
+  });
+
+  it("keeps Best and Pure best separate", () => {
+    const storage = fakeStorage();
+    recordScore(storage, 900, 0, STORAGE_KEY);
+    recordScore(storage, 400, 0, PURE_STORAGE_KEY);
+    expect(loadBestScore(storage, STORAGE_KEY)).toBe(900);
+    expect(loadBestScore(storage, PURE_STORAGE_KEY)).toBe(400);
   });
 
   it("ignores best scores saved under the old scoring rules", () => {

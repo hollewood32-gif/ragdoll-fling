@@ -3,7 +3,8 @@
 import Matter from "matter-js";
 import "./style.css";
 import { CONFIG } from "./config";
-import { getBrowserStorage, loadBestScore, recordScore } from "./bestScore";
+import { getBrowserStorage, loadBestScore, PURE_STORAGE_KEY, recordScore } from "./bestScore";
+import { coinsForScore, loadCoins, saveCoins } from "./coins";
 import { GRAB_RADIUS, pickPart } from "./grab";
 import { createRagdoll, wholeBodySpeed, type Ragdoll } from "./ragdoll";
 import { Combo, damageFromSpeed, pointsForHit } from "./scoring";
@@ -25,6 +26,8 @@ canvas.height = H;
 const resultsScreen = document.getElementById("results")!;
 const finalScoreText = document.getElementById("final-score")!;
 const bestScoreText = document.getElementById("best-score")!;
+const pureBestText = document.getElementById("pure-best-score")!;
+const coinsEarnedText = document.getElementById("coins-earned")!;
 const newBestBadge = document.getElementById("new-best")!;
 const statBiggest = document.getElementById("stat-biggest")!;
 const statCombo = document.getElementById("stat-combo")!;
@@ -35,6 +38,8 @@ const toMenuButton = document.getElementById("to-menu")!;
 const menuScreen = document.getElementById("menu")!;
 const menuBestLine = document.getElementById("menu-best")!;
 const menuBestScore = document.getElementById("menu-best-score")!;
+const menuPureBest = document.getElementById("menu-pure-best")!;
+const menuCoins = document.getElementById("menu-coins")!;
 const playButton = document.getElementById("play")!;
 const soundToggle = document.getElementById("sound-toggle")!;
 
@@ -75,6 +80,10 @@ const combo = new Combo();
 // Best score, remembered on this device between visits.
 const storage = getBrowserStorage();
 let bestScore = loadBestScore(storage);
+let pureBest = loadBestScore(storage, PURE_STORAGE_KEY);
+
+// Coins, earned from damage at the end of each round.
+let coins = loadCoins(storage);
 
 // Sound effects. The mute setting is remembered like the best score.
 const sound = new Sound(loadMuted(storage));
@@ -295,6 +304,16 @@ function endRound(): void {
   bestScoreText.textContent = bestScore.toLocaleString();
   newBestBadge.hidden = !result.isNewBest;
 
+  // Upgrades don't exist yet, so every round is "pure" for now.
+  // The upgrades PR will only record this when upgrades are switched off.
+  pureBest = recordScore(storage, score, pureBest, PURE_STORAGE_KEY).best;
+  pureBestText.textContent = formatRecord(pureBest);
+
+  const earned = coinsForScore(score);
+  coins += earned;
+  saveCoins(storage, coins);
+  coinsEarnedText.textContent = `+${earned.toLocaleString()} coins`;
+
   statBiggest.textContent = stats.biggestHit.toLocaleString();
   statCombo.textContent = `x${stats.bestMultiplier.toFixed(2)}`;
   statThrows.textContent = String(stats.throws);
@@ -304,6 +323,11 @@ function endRound(): void {
 
   resultsScreen.hidden = false;
   restartButton.focus();
+}
+
+// A record that hasn't been set yet shows as a dash instead of 0.
+function formatRecord(value: number): string {
+  return value > 0 ? value.toLocaleString() : "–";
 }
 
 // Puts everything back to the start of a round.
@@ -332,7 +356,9 @@ function showMenu(): void {
   resetRound();
   phase = "menu";
   menuBestScore.textContent = bestScore.toLocaleString();
+  menuPureBest.textContent = formatRecord(pureBest);
   menuBestLine.hidden = bestScore <= 0;
+  menuCoins.textContent = coins.toLocaleString();
   menuScreen.hidden = false;
   playButton.focus();
 }
