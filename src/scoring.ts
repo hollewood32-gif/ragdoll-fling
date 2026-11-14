@@ -10,7 +10,7 @@ import { CONFIG } from "./config";
 export function damageFromSpeed(speed: number): number {
   if (speed < CONFIG.minImpactSpeed) return 0;
   const extra = speed - CONFIG.minImpactSpeed;
-  return Math.max(1, Math.round(extra ** 1.5));
+  return Math.round(extra ** 1.5);
 }
 
 /** Tracks how many hits landed in quick succession. */
