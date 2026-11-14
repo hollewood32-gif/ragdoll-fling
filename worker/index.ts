@@ -32,10 +32,23 @@ export default {
   },
 } satisfies ExportedHandler<Env>;
 
-/** GET /api/leaderboard: the top 10 scores, highest first (ties: earliest first). */
+/**
+ * Each player's single best score. Players are told apart by initials, so
+ * this keeps one row per initials: the highest score (earliest if tied).
+ * Every submission is still stored; only what the board shows is filtered.
+ */
+const BEST_PER_PLAYER = `
+  SELECT initials, score, created_at FROM (
+    SELECT initials, score, created_at,
+      ROW_NUMBER() OVER (PARTITION BY initials ORDER BY score DESC, created_at ASC) AS nth
+    FROM scores
+  )
+  WHERE nth = 1`;
+
+/** GET /api/leaderboard: the top 10 players' best scores, highest first (ties: earliest first). */
 async function getLeaderboard(env: Env): Promise<Response> {
   const { results } = await env.DB.prepare(
-    "SELECT initials, score, created_at FROM scores ORDER BY score DESC, created_at ASC LIMIT ?",
+    `${BEST_PER_PLAYER} ORDER BY score DESC, created_at ASC LIMIT ?`,
   )
     .bind(TOP_N)
     .all<LeaderboardRow>();
@@ -84,9 +97,13 @@ async function submitScore(request: Request, env: Env): Promise<Response> {
   //    which prevents SQL injection.
   await env.DB.prepare("INSERT INTO scores (initials, score) VALUES (?, ?)").bind(initials, score).run();
 
-  // 5. Rank = 1 + how many scores beat it.
-  const better = await env.DB.prepare("SELECT COUNT(*) AS n FROM scores WHERE score > ?")
-    .bind(score)
+  // 5. Rank = 1 + how many other players have a best that beats this player's
+  //    best. (Their best may be an older score if this one wasn't their highest.)
+  const better = await env.DB.prepare(
+    `SELECT COUNT(DISTINCT initials) AS n FROM scores
+     WHERE initials != ?1 AND score > (SELECT MAX(score) FROM scores WHERE initials = ?1)`,
+  )
+    .bind(initials)
     .first<{ n: number }>();
   const rank = (better?.n ?? 0) + 1;
 
