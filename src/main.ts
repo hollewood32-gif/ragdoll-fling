@@ -4,12 +4,13 @@ import Matter from "matter-js";
 import "./style.css";
 import { CONFIG } from "./config";
 import { getBrowserStorage, loadBestScore, recordScore } from "./bestScore";
+import { GRAB_RADIUS, pickPart } from "./grab";
 import { createRagdoll, wholeBodySpeed, type Ragdoll } from "./ragdoll";
 import { Combo, damageFromSpeed, pointsForHit } from "./scoring";
 import { loadMuted, saveMuted, Sound } from "./sound";
 import { RoundStats } from "./stats";
 
-const { Engine, Composite, Bodies, Body, Constraint, Events, Query, Vector } = Matter;
+const { Engine, Composite, Bodies, Body, Constraint, Events, Vector } = Matter;
 const W = CONFIG.width;
 const H = CONFIG.height;
 
@@ -115,6 +116,7 @@ const lastHitAt = new Map<Matter.Body, number>(); // body -> time of last scorin
 // Input: grab and fling with Pointer Events (mouse today, touch later)
 // ---------------------------------------------------------------------------
 let grab: Matter.Constraint | null = null;
+let grabPointerId: number | null = null; // the finger or mouse holding the ragdoll
 
 // Converts a pointer position on screen into game-world coordinates.
 function toWorld(e: PointerEvent): Matter.Vector {
@@ -127,18 +129,27 @@ function toWorld(e: PointerEvent): Matter.Vector {
 
 canvas.addEventListener("pointerdown", (e) => {
   if (phase === "menu" || phase === "results") return;
+  if (grab) return; // already holding it: ignore a second finger
+
+  // Fingers are less precise than a mouse, so touches get a bigger grab radius.
   const point = toWorld(e);
-  const body = Query.point(ragdoll.parts, point)[0];
-  if (!body) return;
+  const radius = e.pointerType === "mouse" ? GRAB_RADIUS.mouse : GRAB_RADIUS.touch;
+  const target = pickPart(ragdoll.parts, point, radius);
+  if (!target) return;
 
   // Keep receiving pointer events even if the pointer leaves the canvas.
-  canvas.setPointerCapture(e.pointerId);
+  try {
+    canvas.setPointerCapture(e.pointerId);
+  } catch {
+    // Not supported for this pointer: dragging still works inside the canvas.
+  }
+  grabPointerId = e.pointerId;
 
-  // A springy rope from the pointer to the exact spot that was grabbed.
+  // A springy rope from the pointer to the grabbed spot.
   grab = Constraint.create({
     pointA: point,
-    bodyB: body,
-    pointB: Vector.sub(point, body.position),
+    bodyB: target.body,
+    pointB: target.offset,
     length: 0,
     stiffness: 0.2,
     damping: 0.05,
@@ -152,22 +163,26 @@ canvas.addEventListener("pointerdown", (e) => {
 });
 
 canvas.addEventListener("pointermove", (e) => {
-  if (grab) grab.pointA = toWorld(e);
+  if (grab && e.pointerId === grabPointerId) grab.pointA = toWorld(e);
 });
 
 function release(): void {
+  grabPointerId = null;
   if (!grab) return;
   Composite.remove(engine.world, grab);
   grab = null; // the ragdoll keeps its speed, which is the "fling"
 }
 
 // The player letting go counts as a throw (release() is also used for resets).
-function onPointerUp(): void {
+function onPointerUp(e: PointerEvent): void {
+  if (e.pointerId !== grabPointerId) return; // a different finger lifted
   if (grab && phase === "playing") stats.recordThrow();
   release();
 }
 canvas.addEventListener("pointerup", onPointerUp);
-canvas.addEventListener("pointercancel", release);
+canvas.addEventListener("pointercancel", (e) => {
+  if (e.pointerId === grabPointerId) release();
+});
 
 // ---------------------------------------------------------------------------
 // Collisions: turn wall impacts into damage
