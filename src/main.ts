@@ -3,6 +3,7 @@
 import Matter from "matter-js";
 import "./style.css";
 import { CONFIG } from "./config";
+import { getBrowserStorage, loadBestScore, recordScore } from "./bestScore";
 import { createRagdoll, wholeBodySpeed, type Ragdoll } from "./ragdoll";
 import { Combo, damageFromSpeed } from "./scoring";
 
@@ -20,6 +21,8 @@ canvas.height = H;
 
 const resultsScreen = document.getElementById("results")!;
 const finalScoreText = document.getElementById("final-score")!;
+const bestScoreText = document.getElementById("best-score")!;
+const newBestBadge = document.getElementById("new-best")!;
 const restartButton = document.getElementById("restart")!;
 
 // ---------------------------------------------------------------------------
@@ -55,6 +58,10 @@ let phase: Phase = "ready";
 let timeLeft = CONFIG.roundSeconds;
 let score = 0;
 const combo = new Combo();
+
+// Best score, remembered on this device between visits.
+const storage = getBrowserStorage();
+let bestScore = loadBestScore(storage);
 
 // "Juice": floating damage numbers, screen shake, and white flashes on hit parts.
 interface FloatingText {
@@ -183,6 +190,12 @@ function endRound(): void {
   timeLeft = 0;
   release();
   finalScoreText.textContent = score.toLocaleString();
+
+  const result = recordScore(storage, score, bestScore);
+  bestScore = result.best;
+  bestScoreText.textContent = bestScore.toLocaleString();
+  newBestBadge.hidden = !result.isNewBest;
+
   resultsScreen.hidden = false;
   restartButton.focus();
 }
@@ -305,6 +318,12 @@ function drawHud(): void {
 
   ctx.textAlign = "left";
   ctx.fillText(`Damage: ${score.toLocaleString()}`, 28, 24);
+  if (bestScore > 0) {
+    ctx.font = "600 18px system-ui, sans-serif";
+    ctx.fillStyle = "rgba(255,255,255,0.6)";
+    ctx.fillText(`Best: ${bestScore.toLocaleString()}`, 28, 60);
+    ctx.font = "800 28px system-ui, sans-serif";
+  }
 
   ctx.textAlign = "right";
   ctx.fillStyle = timeLeft <= 5 && phase === "playing" ? "#ef476f" : "#ffffff";
