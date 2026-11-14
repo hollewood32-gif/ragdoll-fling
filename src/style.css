@@ -99,6 +99,30 @@ canvas:active {
   color: #fff;
 }
 
+.overlay .stats {
+  display: flex;
+  gap: 28px;
+  margin: 0 0 16px;
+}
+
+.overlay .stats div {
+  text-align: center;
+}
+
+.overlay .stats dt {
+  font-size: 13px;
+  color: #889;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.overlay .stats dd {
+  margin: 2px 0 0;
+  font-size: 24px;
+  font-weight: 800;
+  color: #fff;
+}
+
 .overlay .hint {
   margin-top: 14px;
   font-size: 13px;

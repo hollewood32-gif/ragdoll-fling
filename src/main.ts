@@ -7,6 +7,7 @@ import { getBrowserStorage, loadBestScore, recordScore } from "./bestScore";
 import { createRagdoll, wholeBodySpeed, type Ragdoll } from "./ragdoll";
 import { Combo, damageFromSpeed, pointsForHit } from "./scoring";
 import { loadMuted, saveMuted, Sound } from "./sound";
+import { RoundStats } from "./stats";
 
 const { Engine, Composite, Bodies, Body, Constraint, Events, Query, Vector } = Matter;
 const W = CONFIG.width;
@@ -24,6 +25,9 @@ const resultsScreen = document.getElementById("results")!;
 const finalScoreText = document.getElementById("final-score")!;
 const bestScoreText = document.getElementById("best-score")!;
 const newBestBadge = document.getElementById("new-best")!;
+const statBiggest = document.getElementById("stat-biggest")!;
+const statCombo = document.getElementById("stat-combo")!;
+const statThrows = document.getElementById("stat-throws")!;
 const restartButton = document.getElementById("restart")!;
 const toMenuButton = document.getElementById("to-menu")!;
 
@@ -85,7 +89,26 @@ interface FloatingText {
 }
 const floaters: FloatingText[] = [];
 let shake = 0;
-const flashes = new Map<Matter.Body, number>(); // body -> seconds of flash left
+
+// Sparks: little particles that burst off the wall on impact.
+interface Spark {
+  x: number;
+  y: number;
+  vx: number; // pixels per second
+  vy: number;
+  life: number; // seconds left
+  maxLife: number;
+  size: number;
+  color: string;
+}
+const sparks: Spark[] = [];
+const MAX_SPARKS = 300;
+
+// Accessibility: if the device asks for reduced motion, keep screen shake small.
+const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+const shakeScale = (): number => (reducedMotionQuery.matches ? 0.15 : 1);
+
+const stats = new RoundStats();const flashes = new Map<Matter.Body, number>(); // body -> seconds of flash left
 const lastHitAt = new Map<Matter.Body, number>(); // body -> time of last scoring hit (ms)
 
 // ---------------------------------------------------------------------------
@@ -137,7 +160,13 @@ function release(): void {
   Composite.remove(engine.world, grab);
   grab = null; // the ragdoll keeps its speed, which is the "fling"
 }
-canvas.addEventListener("pointerup", release);
+
+// The player letting go counts as a throw (release() is also used for resets).
+function onPointerUp(): void {
+  if (grab && phase === "playing") stats.recordThrow();
+  release();
+}
+canvas.addEventListener("pointerup", onPointerUp);
 canvas.addEventListener("pointercancel", release);
 
 // ---------------------------------------------------------------------------
@@ -177,6 +206,7 @@ function registerHit(part: Matter.Body, impactSpeed: number): void {
   const multiplier = held ? 1 : combo.hit();
   const points = pointsForHit(damage, multiplier, held);
   score += points;
+  stats.recordHit(points, multiplier);
 
   sound.impact(damage);
   if (!held && combo.count > 1) sound.combo(combo.count);
@@ -189,8 +219,40 @@ function registerHit(part: Matter.Body, impactSpeed: number): void {
     color: held ? "#9aa0b8" : "#ffd166",
     life: 0.9,
   });
-  shake = Math.max(shake, Math.min(22, 2 + damage * 0.08));
+  shake = Math.max(shake, Math.min(22, 2 + damage * 0.08) * shakeScale());
   flashes.set(part, 0.12);
+  spawnSparks(part, damage, held);
+}
+
+// Bursts sparks from the wall the part hit, pointing back into the arena.
+function spawnSparks(part: Matter.Body, damage: number, held: boolean): void {
+  const { x, y } = part.position;
+  // Which wall is closest? Its inward direction is where the sparks fly.
+  const walls = [
+    { dist: x, ox: 0, oy: y, nx: 1, ny: 0 }, // left
+    { dist: W - x, ox: W, oy: y, nx: -1, ny: 0 }, // right
+    { dist: y, ox: x, oy: 0, nx: 0, ny: 1 }, // ceiling
+    { dist: H - y, ox: x, oy: H, nx: 0, ny: -1 }, // floor
+  ];
+  const wall = walls.reduce((a, b) => (b.dist < a.dist ? b : a));
+
+  const count = held ? 3 : Math.min(24, 4 + Math.floor(damage / 10));
+  const color = held ? "#9aa0b8" : (part.render.fillStyle ?? "#ffd166");
+  for (let i = 0; i < count && sparks.length < MAX_SPARKS; i++) {
+    const angle = Math.atan2(wall.ny, wall.nx) + (Math.random() - 0.5) * 2.2; // spread ~125 degrees
+    const speed = 120 + Math.random() * (150 + damage * 3);
+    const life = 0.3 + Math.random() * 0.4;
+    sparks.push({
+      x: wall.ox,
+      y: wall.oy,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life,
+      maxLife: life,
+      size: 2 + Math.random() * (held ? 2 : 4),
+      color: Math.random() < 0.35 ? "#ffffff" : color,
+    });
+  }
 }
 
 // Speed cap: stops parts moving so fast that they tunnel through a wall.
@@ -218,6 +280,10 @@ function endRound(): void {
   bestScoreText.textContent = bestScore.toLocaleString();
   newBestBadge.hidden = !result.isNewBest;
 
+  statBiggest.textContent = stats.biggestHit.toLocaleString();
+  statCombo.textContent = `x${stats.bestMultiplier.toFixed(2)}`;
+  statThrows.textContent = String(stats.throws);
+
   sound.end();
   if (result.isNewBest) sound.newBest();
 
@@ -232,7 +298,9 @@ function resetRound(): void {
   timeLeft = CONFIG.roundSeconds;
   score = 0;
   combo.reset();
+  stats.reset();
   floaters.length = 0;
+  sparks.length = 0;
   flashes.clear();
   lastHitAt.clear();
   shake = 0;
@@ -310,6 +378,16 @@ function update(dt: number): void {
     if (f.life <= 0) floaters.splice(i, 1);
   }
 
+  for (let i = sparks.length - 1; i >= 0; i--) {
+    const s = sparks[i];
+    s.vy += 900 * dt; // gravity
+    s.vx *= 0.97; // air drag
+    s.x += s.vx * dt;
+    s.y += s.vy * dt;
+    s.life -= dt;
+    if (s.life <= 0) sparks.splice(i, 1);
+  }
+
   shake *= 0.88; // fade the shake out quickly
 
   for (const [body, left] of flashes) {
@@ -369,6 +447,14 @@ function draw(): void {
   }
 
   for (const part of ragdoll.parts) drawBody(part);
+
+  // Sparks fade out as they die
+  for (const s of sparks) {
+    ctx.globalAlpha = s.life / s.maxLife;
+    ctx.fillStyle = s.color;
+    ctx.fillRect(s.x - s.size / 2, s.y - s.size / 2, s.size, s.size);
+  }
+  ctx.globalAlpha = 1;
 
   // Floating damage numbers
   ctx.textAlign = "center";
