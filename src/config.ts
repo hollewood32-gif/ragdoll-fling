@@ -19,6 +19,10 @@ export const CONFIG = {
   // twitching against the floor from earning free points.
   minBodySpeed: 1.5,
 
+  // Hits while the player is still holding the ragdoll score this fraction of
+  // normal and don't build the combo, so throwing beats shaking it against a wall.
+  heldHitFactor: 0.25,
+
   // A combo continues if the next hit lands within this many seconds.
   comboWindowSeconds: 1.0,
   // Each hit in a combo adds this much to the multiplier, up to maxMultiplier.

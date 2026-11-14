@@ -5,7 +5,7 @@ import "./style.css";
 import { CONFIG } from "./config";
 import { getBrowserStorage, loadBestScore, recordScore } from "./bestScore";
 import { createRagdoll, wholeBodySpeed, type Ragdoll } from "./ragdoll";
-import { Combo, damageFromSpeed } from "./scoring";
+import { Combo, damageFromSpeed, pointsForHit } from "./scoring";
 import { loadMuted, saveMuted, Sound } from "./sound";
 
 const { Engine, Composite, Bodies, Body, Constraint, Events, Query, Vector } = Matter;
@@ -80,6 +80,7 @@ interface FloatingText {
   y: number;
   text: string;
   size: number;
+  color: string; // gold for thrown hits, grey for held hits
   life: number; // seconds left
 }
 const floaters: FloatingText[] = [];
@@ -171,18 +172,21 @@ function registerHit(part: Matter.Body, impactSpeed: number): void {
   if (damage <= 0) return;
   lastHitAt.set(part, now);
 
-  const multiplier = combo.hit();
-  const points = Math.round(damage * multiplier);
+  // Hits while the ragdoll is still held are worth less and don't build the combo.
+  const held = grab !== null;
+  const multiplier = held ? 1 : combo.hit();
+  const points = pointsForHit(damage, multiplier, held);
   score += points;
 
   sound.impact(damage);
-  if (combo.count > 1) sound.combo(combo.count);
+  if (!held && combo.count > 1) sound.combo(combo.count);
 
   floaters.push({
     x: part.position.x,
     y: part.position.y,
     text: String(points),
-    size: Math.min(64, 18 + damage * 0.25),
+    size: held ? Math.min(28, 14 + points * 0.25) : Math.min(64, 18 + damage * 0.25),
+    color: held ? "#9aa0b8" : "#ffd166",
     life: 0.9,
   });
   shake = Math.max(shake, Math.min(22, 2 + damage * 0.08));
@@ -375,7 +379,7 @@ function draw(): void {
     ctx.lineWidth = 5;
     ctx.strokeStyle = "#1b1b2f";
     ctx.strokeText(f.text, f.x, f.y);
-    ctx.fillStyle = "#ffd166";
+    ctx.fillStyle = f.color;
     ctx.fillText(f.text, f.x, f.y);
   }
   ctx.globalAlpha = 1;
