@@ -1,0 +1,18 @@
+{
+  // TypeScript settings for the server code. It runs on Cloudflare Workers,
+  // not in a browser, so it gets Workers types instead of DOM types.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "types": ["@cloudflare/workers-types"],
+    "strict": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
+  },
+  "include": ["."]
+}

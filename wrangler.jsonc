@@ -18,11 +18,27 @@
   // so a Cloudflare update can't silently change how the site runs.
   "compatibility_date": "2026-11-01",
 
-  // This game is a static site: Cloudflare serves the files Vite builds
-  // into dist/. No server code is needed (yet; the leaderboard will add some).
+  // Server code for the leaderboard API (worker/index.ts).
+  "main": "./worker/index.ts",
+
+  // The game itself is static files that Vite builds into dist/. Requests are
+  // served straight from those files, except /api/*, which runs the code above.
   "assets": {
-    "directory": "./dist"
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
   },
+
+  // The leaderboard database. The code reaches it as env.DB. Migrations in
+  // migrations/ are applied by the pipeline before each deploy.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "fling-scores",
+      "database_id": "ad225ebb-634e-4b50-8cb4-1a63bd42fa89",
+      "migrations_dir": "migrations"
+    }
+  ],
 
   // Production keeps its backup address https://fling.ragdoll-fling.workers.dev,
   // but doesn't make per-version preview links (those belong to staging).
@@ -46,6 +62,17 @@
 
       "routes": [
         { "pattern": "fling-staging.jeffreydoughty.com", "custom_domain": true }
+      ],
+
+      // Staging has its own database, so testing can never touch real scores.
+      // (Each environment must list its databases; they aren't inherited.)
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "fling-scores-staging",
+          "database_id": "2423c963-2185-439f-a114-0748d8af0c40",
+          "migrations_dir": "migrations"
+        }
       ]
     }
   }

@@ -66,9 +66,7 @@ Original game, inspired by the *feel* of old ragdoll sandbox toys, not a copy of
 4. [x] GitHub: create repo, push code, open the first pull request, protect `main`. (Done 2026-11-13. Repo: https://github.com/hollewood32-gif/ragdoll-fling. PR #1 added the README and was merged by the owner.)
 5. [x] First deploy: deploy once by command to see what the pipeline will automate, then connect the subdomain. (Done 2026-11-13. `npm run deploy` = build + `wrangler deploy`. Config in `wrangler.jsonc`: static assets from `dist/` plus the custom domain route.)
 6. [x] CI/CD: build the pipeline above. Prove it by opening a PR with a failing test and showing it gets blocked. (Done 2026-11-13. PR #4 added it; PR #5 planted a bug, the required `checks` job failed, merging was blocked, and the PR was closed unmerged. The first pipeline production deploy was approved by the owner.)
-7. [ ] Feature PRs. v1 items done: best-score memory (#7), start menu (#8), sound effects (#9), score balance (#10: held hits score 25% and skip the combo; best scores reset to `best-score-v2`), polish (#11 stats/sparks/reduced motion, #12 favicon and link preview card), mobile controls (#13). Remaining: currency and upgrades (design below), as small PRs:
-   - [ ] PR: coins and the Best / Pure best split.
-   - [ ] PR: shop screen, upgrade effects, and the Upgrades On/Off switch.
+7. [x] Feature PRs. v1 items: best-score memory (#7), start menu (#8), sound effects (#9), score balance (#10: held hits score 25% and skip the combo; best scores reset to `best-score-v2`), polish (#11 stats/sparks/reduced motion, #12 favicon and link preview card), mobile controls (#13). Then currency and upgrades: design (#14), coins and Pure best (#15), shop and upgrades (#16).
 
 ### Currency and upgrades design (approved 2026-11-13)
 
@@ -82,7 +80,22 @@ Original game, inspired by the *feel* of old ragdoll sandbox toys, not a copy of
   - Bouncier walls: more wall bounce per level, so throws ricochet into more hits.
 - **Prices per level:** 500, 900, 1,600, 2,800, 5,000 (about x1.75 each). Maxing one upgrade takes about 18 good rounds; all four about 70. All numbers live in `config.ts`.
 - Coins and upgrade levels are separate from the best-score keys, so changing scoring later (and bumping the best-score key) doesn't wipe purchases.
-8. [ ] Stretch: leaderboard with API and D1.
+8. [ ] Stretch: leaderboard with API and D1. In progress, as three PRs:
+   - [ ] PR: server foundation (Worker API code, first migration, D1 bindings, migrations in the pipeline, `npm run approve`).
+   - [ ] PR: `POST /api/scores` with validation, plausibility cap and rate limit.
+   - [ ] PR: leaderboard screen in the game and the submit prompt on a new Pure best.
+
+### Leaderboard design (approved 2026-11-13)
+
+- **Names:** 3-letter initials, A to Z only (arcade style). No free text, so nothing to moderate and no personal info.
+- **Board:** top 10 all-time **Pure** scores (no upgrades), highest first, ties go to the earlier score.
+- **Submitting:** only on a new Pure best, and only when the player clicks "Submit to leaderboard". Nothing is sent automatically.
+- **Anti-cheat (sensible, not perfect):** server rejects malformed data and scores above 300,000 (about 5x the best human pure round); a Workers rate-limit binding caps submissions per visitor. A determined cheater can still post a believable fake score; that's accepted for a browser game.
+- **Privacy:** the database stores initials, score and date only. IP addresses are used in memory for rate limiting and never stored.
+- **Databases:** `fling-scores` (production, id `ad225ebb-634e-4b50-8cb4-1a63bd42fa89`) and `fling-scores-staging` (staging and PR previews, id `2423c963-2185-439f-a114-0748d8af0c40`), both created 2026-11-13 in region WNAM. Binding name `DB` in both.
+- **Migrations:** numbered SQL files in `migrations/`. Never edit one that has run; add a new file. The pipeline applies them before each deploy (and PR previews apply them to the staging database).
+- **API token:** needs Account → D1 → Edit in addition to the Workers permissions.
+- **Local testing:** `npx wrangler d1 migrations apply DB --local --env staging`, then `wrangler dev --env staging` serves the game and API on http://localhost:8787.
 
 ## Notes for future sessions
 
