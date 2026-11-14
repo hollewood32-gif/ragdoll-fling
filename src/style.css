@@ -62,7 +62,27 @@ canvas:active {
   font-size: 72px;
   font-weight: 800;
   color: #ffd166;
+  margin-bottom: 16px;
+}
+
+.overlay .new-best {
+  margin: -12px 0 8px;
+  padding: 4px 14px;
+  border-radius: 999px;
+  background: #06d6a0;
+  color: #0f0f1e;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.overlay .new-best[hidden] {
+  display: none;
+}
+
+.overlay .best-line {
   margin-bottom: 24px;
+  font-size: 18px;
 }
 
 .overlay button {

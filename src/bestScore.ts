@@ -1,0 +1,50 @@
+// Remembers the best score on this device using the browser's localStorage.
+// Storage can be missing or blocked (some private browsing modes), so every
+// access is wrapped in try/catch and the game keeps working without it.
+
+const STORAGE_KEY = "ragdoll-fling:best-score";
+
+/** The two localStorage methods we use. Tests pass a fake with the same shape. */
+export interface ScoreStorage {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+}
+
+/** Returns the browser's localStorage, or undefined if it's blocked. */
+export function getBrowserStorage(): ScoreStorage | undefined {
+  try {
+    return window.localStorage;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Reads the saved best score. Anything missing or invalid counts as 0. */
+export function loadBestScore(storage: ScoreStorage | undefined): number {
+  try {
+    const raw = storage?.getItem(STORAGE_KEY);
+    if (raw == null) return 0;
+    const value = Number(raw);
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Call when a round ends. Saves the score if it beats the previous best.
+ * Returns the (possibly new) best and whether this round set it.
+ */
+export function recordScore(
+  storage: ScoreStorage | undefined,
+  score: number,
+  previousBest: number,
+): { best: number; isNewBest: boolean } {
+  if (score <= previousBest) return { best: previousBest, isNewBest: false };
+  try {
+    storage?.setItem(STORAGE_KEY, String(score));
+  } catch {
+    // Storage is full or blocked: still celebrate, just don't remember it.
+  }
+  return { best: score, isNewBest: true };
+}
