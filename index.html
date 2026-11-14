@@ -43,6 +43,7 @@
         </div>
         <div class="buttons">
           <button id="menu-shop" class="secondary">Shop</button>
+          <button id="menu-leaderboard" class="secondary">Leaderboard</button>
           <button id="upgrades-toggle" class="secondary" aria-pressed="true">Upgrades: On</button>
         </div>
         <p class="hint">Press M to mute or unmute any time</p>
@@ -61,12 +62,39 @@
           <div><dt>Throws</dt><dd id="stat-throws">0</dd></div>
         </dl>
         <p id="coins-earned" class="coin-line">+0 coins</p>
+
+        <!-- Shown only after a new Pure best. Nothing is sent until Submit is clicked. -->
+        <form id="submit-score" class="submit-score" hidden>
+          <label for="initials-input">New Pure best! Submit to the leaderboard:</label>
+          <div class="submit-row">
+            <input
+              id="initials-input"
+              name="initials"
+              autocomplete="off"
+              autocapitalize="characters"
+              spellcheck="false"
+              placeholder="ABC"
+              aria-describedby="submit-status"
+            />
+            <button id="submit-button" type="submit">Submit</button>
+          </div>
+          <p id="submit-status" class="submit-status" role="status"></p>
+        </form>
         <p class="best-line">Best: <span id="best-score">0</span> · Pure best: <span id="pure-best-score">0</span></p>
         <div class="buttons">
           <button id="restart">Play again</button>
           <button id="results-shop" class="secondary">Shop</button>
           <button id="to-menu" class="secondary">Menu</button>
         </div>
+      </div>
+
+      <!-- Leaderboard: top 10 Pure scores, loaded from /api/leaderboard. -->
+      <div id="leaderboard" class="overlay" hidden>
+        <h1>Leaderboard</h1>
+        <p class="board-note">Top 10 Pure scores (no upgrades)</p>
+        <ol id="board-list" class="board-list"></ol>
+        <p id="board-status" class="board-status" role="status"></p>
+        <button id="board-back" class="secondary">Back</button>
       </div>
 
       <!-- Shop. Rows are built in code from the UPGRADES list in src/upgrades.ts. -->

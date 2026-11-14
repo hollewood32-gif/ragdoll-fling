@@ -82,8 +82,9 @@ Original game, inspired by the *feel* of old ragdoll sandbox toys, not a copy of
 - Coins and upgrade levels are separate from the best-score keys, so changing scoring later (and bumping the best-score key) doesn't wipe purchases.
 8. [ ] Stretch: leaderboard with API and D1. In progress, as three PRs:
    - [x] PR #17: server foundation (Worker API code, first migration, D1 bindings, migrations in the pipeline, `npm run approve`).
-   - [x] PR: `POST /api/scores` with validation, plausibility cap and rate limit (5 per visitor per minute; rate-limit namespaces 1001 production, 1002 staging).
-   - [ ] PR: leaderboard screen in the game and the submit prompt on a new Pure best.
+   - [x] PR #18: `POST /api/scores` with validation, plausibility cap and rate limit (5 per visitor per minute; rate-limit namespaces 1001 production, 1002 staging).
+   - [x] PR: leaderboard screen in the game and the submit prompt on a new Pure best (client code in `src/leaderboard.ts`; initials remembered in localStorage; key shortcuts ignored while typing).
+   - Full local test: the `worker` entry in `.claude/launch.json` runs `wrangler dev --env staging` on port 8787 (serves the built `dist/` plus the API with a local database). Run `npm run build` first. A hidden browser pane pauses the game loop, so full rounds need the pane visible.
 
 ### Leaderboard design (approved 2026-11-13)
 

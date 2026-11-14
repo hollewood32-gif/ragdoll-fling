@@ -249,6 +249,119 @@ canvas:active {
   color: #889;
 }
 
+/* ---------------------------------------------------------------------------
+   Leaderboard and the submit form
+   --------------------------------------------------------------------------- */
+.overlay .board-note {
+  margin-bottom: 1.3cqh;
+  font-size: clamp(10px, 2.3cqh, 14px);
+}
+
+.overlay .board-list {
+  display: grid;
+  gap: 0.5cqh;
+  width: min(100%, max(70cqh, 260px));
+  margin: 0 0 1.3cqh;
+  padding: 0;
+  list-style: none;
+  counter-reset: rank;
+}
+
+.overlay .board-list li {
+  display: grid;
+  grid-template-columns: 4ch 1fr auto;
+  gap: 2cqh;
+  padding: 0.5cqh 2cqh;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: clamp(12px, 2.7cqh, 16px);
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+}
+
+.overlay .board-list li::before {
+  counter-increment: rank;
+  content: "#" counter(rank);
+  color: #889;
+}
+
+.overlay .board-list li:first-child {
+  color: #ffd166;
+  font-weight: 800;
+}
+
+.overlay .board-list .initials {
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.overlay .board-status,
+.overlay .submit-status {
+  min-height: 1.2em;
+  font-size: clamp(11px, 2.5cqh, 15px);
+}
+
+.overlay .submit-score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.7cqh;
+  margin: 0 0 1.3cqh;
+}
+
+.overlay .submit-score[hidden] {
+  display: none;
+}
+
+.overlay .submit-score label {
+  color: #06d6a0;
+  font-weight: 700;
+  font-size: clamp(11px, 2.7cqh, 16px);
+}
+
+.overlay .submit-row {
+  display: flex;
+  gap: 1.3cqh;
+}
+
+.overlay .submit-score input {
+  width: 5ch;
+  min-height: 34px;
+  padding: 0.7cqh 1.3cqh;
+  border: 2px solid #3a3a5c;
+  border-radius: 8px;
+  background: #0f0f1e;
+  color: #fff;
+  font: inherit;
+  font-size: clamp(14px, 3.3cqh, 20px);
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.overlay .submit-score input:focus {
+  border-color: #06d6a0;
+  outline: none;
+}
+
+.overlay .submit-score button {
+  min-height: 34px;
+  padding: 0.7cqh 3cqh;
+  font-size: clamp(13px, 3cqh, 18px);
+}
+
+.overlay button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* The leaderboard scrolls rather than clipping on short screens. */
+#leaderboard {
+  overflow-y: auto;
+  justify-content: safe center;
+}
+
 /* Small arenas (phones): drop the longer text so the essentials fit. */
 @container (max-height: 320px) {
   .overlay .tagline,
@@ -269,8 +382,9 @@ canvas:active {
     margin-bottom: 1cqh;
   }
 
-  #shop h1 {
-    display: none; /* the coin line is enough of a header */
+  #shop h1,
+  #leaderboard h1 {
+    display: none; /* the line below it is enough of a header */
   }
 
   .overlay .shop-list {

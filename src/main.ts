@@ -24,6 +24,14 @@ import {
   type RoundSettings,
 } from "./upgrades";
 import { RoundStats } from "./stats";
+import {
+  fetchLeaderboard,
+  isValidInitials,
+  loadInitials,
+  normalizeInitials,
+  saveInitials,
+  submitScore,
+} from "./leaderboard";
 
 const { Engine, Composite, Bodies, Body, Constraint, Events, Vector } = Matter;
 const W = CONFIG.width;
@@ -64,6 +72,17 @@ const shopScreen = document.getElementById("shop")!;
 const shopCoins = document.getElementById("shop-coins")!;
 const shopList = document.getElementById("shop-list")!;
 const shopBackButton = document.getElementById("shop-back")!;
+
+const menuLeaderboardButton = document.getElementById("menu-leaderboard")!;
+const leaderboardScreen = document.getElementById("leaderboard")!;
+const boardList = document.getElementById("board-list")!;
+const boardStatus = document.getElementById("board-status")!;
+const boardBackButton = document.getElementById("board-back")!;
+
+const submitForm = document.getElementById("submit-score") as HTMLFormElement;
+const initialsInput = document.getElementById("initials-input") as HTMLInputElement;
+const submitButton = document.getElementById("submit-button") as HTMLButtonElement;
+const submitStatus = document.getElementById("submit-status")!;
 
 // ---------------------------------------------------------------------------
 // Physics world: gravity, four walls, one ragdoll
@@ -346,7 +365,12 @@ function endRound(): void {
   newBestBadge.hidden = !result.isNewBest;
 
   // Pure best only counts rounds played without any active upgrades.
-  if (roundIsPure) pureBest = recordScore(storage, score, pureBest, PURE_STORAGE_KEY).best;
+  let isNewPureBest = false;
+  if (roundIsPure) {
+    const pureResult = recordScore(storage, score, pureBest, PURE_STORAGE_KEY);
+    pureBest = pureResult.best;
+    isNewPureBest = pureResult.isNewBest;
+  }
   pureBestText.textContent = formatRecord(pureBest) + (roundIsPure ? "" : " (upgrades on: not counted)");
 
   const earned = coinsForScore(score);
@@ -362,7 +386,12 @@ function endRound(): void {
   if (result.isNewBest) sound.newBest();
 
   resultsScreen.hidden = false;
-  restartButton.focus();
+  if (isNewPureBest) {
+    offerSubmit(score);
+  } else {
+    submitForm.hidden = true;
+    restartButton.focus();
+  }
 }
 
 // A record that hasn't been set yet shows as a dash instead of 0.
@@ -391,6 +420,76 @@ function restart(): void {
   sound.click();
   resetRound();
   phase = "ready"; // the clock starts on the first grab
+}
+
+// ---------------------------------------------------------------------------
+// Leaderboard
+// ---------------------------------------------------------------------------
+let scoreToSubmit = 0;
+
+// Shows the submit form on the results screen after a new Pure best.
+function offerSubmit(newPureBest: number): void {
+  scoreToSubmit = newPureBest;
+  initialsInput.value = loadInitials(storage);
+  initialsInput.disabled = false;
+  submitButton.disabled = false;
+  submitStatus.textContent = "";
+  submitForm.hidden = false;
+  initialsInput.focus();
+}
+
+async function sendScore(): Promise<void> {
+  const initials = normalizeInitials(initialsInput.value);
+  if (!isValidInitials(initials)) {
+    submitStatus.textContent = "Enter 3 letters.";
+    initialsInput.focus();
+    return;
+  }
+  sound.click();
+  submitButton.disabled = true;
+  submitStatus.textContent = "Sending…";
+
+  const result = await submitScore(initials, scoreToSubmit);
+  if (result.ok) {
+    saveInitials(storage, initials);
+    initialsInput.disabled = true;
+    submitStatus.textContent =
+      result.rank <= 10 ? `You're #${result.rank} on the leaderboard!` : `Submitted! You're #${result.rank}.`;
+    sound.buy();
+    restartButton.focus();
+  } else {
+    submitStatus.textContent = result.error;
+    submitButton.disabled = false;
+  }
+}
+
+async function openLeaderboard(): Promise<void> {
+  sound.unlock();
+  sound.click();
+  menuScreen.hidden = true;
+  leaderboardScreen.hidden = false;
+  boardList.replaceChildren();
+  boardStatus.textContent = "Loading…";
+  boardBackButton.focus();
+
+  try {
+    const entries = await fetchLeaderboard();
+    boardList.replaceChildren(
+      ...entries.map((entry) => {
+        const row = document.createElement("li");
+        const initials = document.createElement("span");
+        initials.className = "initials";
+        initials.textContent = entry.initials; // textContent, never HTML, so names can't inject code
+        const points = document.createElement("span");
+        points.textContent = entry.score.toLocaleString();
+        row.append(initials, points);
+        return row;
+      }),
+    );
+    boardStatus.textContent = entries.length === 0 ? "No scores yet. Be the first!" : "";
+  } catch {
+    boardStatus.textContent = "Couldn't load the leaderboard. Try again later.";
+  }
 }
 
 function showMenu(): void {
@@ -516,11 +615,26 @@ toMenuButton.addEventListener("click", () => {
 playButton.addEventListener("click", startFromMenu);
 soundToggle.addEventListener("click", toggleMute);
 window.addEventListener("keydown", (e) => {
+  // Don't treat typing (like initials with an M in them) as a shortcut.
+  if (e.target instanceof HTMLInputElement) return;
   if (e.key === "m" || e.key === "M") toggleMute();
 });
 updateSoundToggle();
 
 menuShopButton.addEventListener("click", () => openShop(menuScreen));
+menuLeaderboardButton.addEventListener("click", openLeaderboard);
+boardBackButton.addEventListener("click", () => {
+  sound.click();
+  leaderboardScreen.hidden = true;
+  showMenu();
+});
+initialsInput.addEventListener("input", () => {
+  initialsInput.value = normalizeInitials(initialsInput.value);
+});
+submitForm.addEventListener("submit", (e) => {
+  e.preventDefault(); // handle it here instead of reloading the page
+  void sendScore();
+});
 resultsShopButton.addEventListener("click", () => openShop(resultsScreen));
 shopBackButton.addEventListener("click", closeShop);
 upgradesToggle.addEventListener("click", toggleUpgrades);
