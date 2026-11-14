@@ -30,6 +30,8 @@ Original game, inspired by the *feel* of old ragdoll sandbox toys, not a copy of
 3. There is a start menu.
 4. There are basic sound effects.
 
+**v1 status: done** (2026-11-13). All four items shipped in PRs #7 (best score), #8 (start menu) and #9 (sound), plus score balance (#10), polish (#11, #12) and mobile controls (#13).
+
 **Out of scope for v1:** multiple weapons, upgrades or shops (planned after v1, see phase 7), online leaderboard (stretch goal), mobile controls (a later feature PR).
 
 ## Tech stack
@@ -64,9 +66,22 @@ Original game, inspired by the *feel* of old ragdoll sandbox toys, not a copy of
 4. [x] GitHub: create repo, push code, open the first pull request, protect `main`. (Done 2026-11-13. Repo: https://github.com/hollewood32-gif/ragdoll-fling. PR #1 added the README and was merged by the owner.)
 5. [x] First deploy: deploy once by command to see what the pipeline will automate, then connect the subdomain. (Done 2026-11-13. `npm run deploy` = build + `wrangler deploy`. Config in `wrangler.jsonc`: static assets from `dist/` plus the custom domain route.)
 6. [x] CI/CD: build the pipeline above. Prove it by opening a PR with a failing test and showing it gets blocked. (Done 2026-11-13. PR #4 added it; PR #5 planted a bug, the required `checks` job failed, merging was blocked, and the PR was closed unmerged. The first pipeline production deploy was approved by the owner.)
-7. [ ] Feature PRs: best-score memory, start menu, sound effects, polish, then mobile controls. After those (post-v1, decided 2026-11-13): currency and upgrades, as several small PRs.
-   - Draft idea: coins earned from round damage (e.g. 1 per 100). A shop between rounds with upgrades like +round time, +damage %, longer combo window, higher max multiplier, bouncier walls. Progress saved in localStorage.
-   - Decide before building: upgrades make scores grow from repeat play, not only skill. Settle how that affects "best score" and the leaderboard stretch goal (for example, a separate "no upgrades" score).
+7. [ ] Feature PRs. v1 items done: best-score memory (#7), start menu (#8), sound effects (#9), score balance (#10: held hits score 25% and skip the combo; best scores reset to `best-score-v2`), polish (#11 stats/sparks/reduced motion, #12 favicon and link preview card), mobile controls (#13). Remaining: currency and upgrades (design below), as small PRs:
+   - [ ] PR: coins and the Best / Pure best split.
+   - [ ] PR: shop screen, upgrade effects, and the Upgrades On/Off switch.
+
+### Currency and upgrades design (approved 2026-11-13)
+
+- **Coins:** 1 coin per 100 damage, added at the end of each round. Saved in localStorage. Shown on the results screen ("+N coins") and the menu (total).
+- **Two best scores:** "Best" counts any round. "Pure best" only counts rounds played with upgrades switched off. The leaderboard stretch goal should use Pure best, so it measures skill, not grind.
+- **Upgrades On/Off switch** on the menu, remembered. Off plays with every upgrade at level 0 (needed for Pure best).
+- **Shop:** a "Shop" button on the menu and the results screen. Four upgrades, 5 levels each:
+  - Longer rounds: +3 s per level (30 s up to 45 s).
+  - Harder hits: +10% damage per level (up to +50%).
+  - Longer combo window: +0.15 s per level (1.0 s up to 1.75 s).
+  - Bouncier walls: more wall bounce per level, so throws ricochet into more hits.
+- **Prices per level:** 500, 900, 1,600, 2,800, 5,000 (about x1.75 each). Maxing one upgrade takes about 18 good rounds; all four about 70. All numbers live in `config.ts`.
+- Coins and upgrade levels are separate from the best-score keys, so changing scoring later (and bumping the best-score key) doesn't wipe purchases.
 8. [ ] Stretch: leaderboard with API and D1.
 
 ## Notes for future sessions
