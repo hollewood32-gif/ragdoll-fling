@@ -2,7 +2,25 @@
 
 import { describe, expect, it } from "vitest";
 import { CONFIG } from "./config";
-import { Combo, damageFromSpeed } from "./scoring";
+import { Combo, damageFromSpeed, pointsForHit } from "./scoring";
+
+describe("pointsForHit", () => {
+  it("multiplies thrown hits by the combo", () => {
+    expect(pointsForHit(100, 2.5, false)).toBe(250);
+  });
+
+  it("scores held hits at a fraction and ignores the combo", () => {
+    expect(pointsForHit(100, 5, true)).toBe(100 * CONFIG.heldHitFactor);
+  });
+
+  it("always gives a held hit at least 1 point", () => {
+    expect(pointsForHit(1, 1, true)).toBe(1);
+  });
+
+  it("makes throwing worth more than holding for the same hit", () => {
+    expect(pointsForHit(80, 1, false)).toBeGreaterThan(pointsForHit(80, 1, true));
+  });
+});
 
 describe("damageFromSpeed", () => {
   it("gives no damage for impacts below the minimum speed", () => {

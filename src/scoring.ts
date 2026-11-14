@@ -13,6 +13,17 @@ export function damageFromSpeed(speed: number): number {
   return Math.max(1, Math.round(extra ** 1.5));
 }
 
+/**
+ * Points for one hit. Thrown hits use the combo multiplier. Hits while the
+ * ragdoll is still held score a fraction and ignore the combo, so the best
+ * strategy is to actually throw it (shaking it against a wall scored ~12x more
+ * than throwing before this rule).
+ */
+export function pointsForHit(damage: number, multiplier: number, held: boolean): number {
+  if (held) return Math.max(1, Math.round(damage * CONFIG.heldHitFactor));
+  return Math.round(damage * multiplier);
+}
+
 /** Tracks how many hits landed in quick succession. */
 export class Combo {
   count = 0;
