@@ -81,8 +81,8 @@ Original game, inspired by the *feel* of old ragdoll sandbox toys, not a copy of
 - **Prices per level:** 500, 900, 1,600, 2,800, 5,000 (about x1.75 each). Maxing one upgrade takes about 18 good rounds; all four about 70. All numbers live in `config.ts`.
 - Coins and upgrade levels are separate from the best-score keys, so changing scoring later (and bumping the best-score key) doesn't wipe purchases.
 8. [ ] Stretch: leaderboard with API and D1. In progress, as three PRs:
-   - [ ] PR: server foundation (Worker API code, first migration, D1 bindings, migrations in the pipeline, `npm run approve`).
-   - [ ] PR: `POST /api/scores` with validation, plausibility cap and rate limit.
+   - [x] PR #17: server foundation (Worker API code, first migration, D1 bindings, migrations in the pipeline, `npm run approve`).
+   - [x] PR: `POST /api/scores` with validation, plausibility cap and rate limit (5 per visitor per minute; rate-limit namespaces 1001 production, 1002 staging).
    - [ ] PR: leaderboard screen in the game and the submit prompt on a new Pure best.
 
 ### Leaderboard design (approved 2026-11-13)

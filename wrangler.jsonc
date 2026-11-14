@@ -40,6 +40,12 @@
     }
   ],
 
+  // Caps score submissions: 5 per visitor per minute. namespace_id is just a
+  // number that must be unique in the Cloudflare account.
+  "ratelimits": [
+    { "name": "SUBMIT_LIMITER", "namespace_id": "1001", "simple": { "limit": 5, "period": 60 } }
+  ],
+
   // Production keeps its backup address https://fling.ragdoll-fling.workers.dev,
   // but doesn't make per-version preview links (those belong to staging).
   "workers_dev": true,
@@ -73,6 +79,11 @@
           "database_id": "2423c963-2185-439f-a114-0748d8af0c40",
           "migrations_dir": "migrations"
         }
+      ],
+
+      // Staging's own submission limit, counted separately from production.
+      "ratelimits": [
+        { "name": "SUBMIT_LIMITER", "namespace_id": "1002", "simple": { "limit": 5, "period": 60 } }
       ]
     }
   }
