@@ -113,6 +113,7 @@ Original game, inspired by the *feel* of old ragdoll sandbox toys, not a copy of
 - Lint is Oxlint, not ESLint, because typescript-eslint doesn't support TypeScript 7 yet. Tests are Vitest (`src/*.test.ts`).
 - npm warns that esbuild and workerd install scripts aren't approved (allowScripts). Deploys work anyway; revisit if `wrangler dev` is needed.
 - GitHub's merge and approve buttons are two-step (Merge → Confirm merge; Review deployments → tick the box → Approve). Verify with `gh pr view N --json state` before continuing, and don't approve production deploys for the owner.
+- `npm.cmd run approve` (run from this folder; it only approves this repo) waits for a deploy that's still building or on staging (checks every 10 s, up to 6 minutes) and approves production as soon as it's ready, so the owner can run it straight after merging. Ported from the portfolio site's version (its PR #16) on 2026-11-14. Don't run it yourself while a deploy is waiting.
 - PowerShell 5.1 quirks: piping a here-string into `git commit -F -` adds an invisible BOM to the message, so use several `-m` flags instead. Avoid `--jq` filters that contain `"` or `\(`.
 - `.claude/` is gitignored (local launch config with this machine's Node path). `.gitattributes` forces LF line endings.
 - After installing tools, an already-open shell may not see them until PATH is reloaded or a new terminal is opened. The Claude app's Terminal panel was opened before the installs and has a stale PATH.
