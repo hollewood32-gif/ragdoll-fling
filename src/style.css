@@ -194,7 +194,7 @@ canvas:active {
 .overlay .shop-list {
   display: grid;
   gap: 1.3cqh;
-  width: min(100%, 92cqh);
+  width: min(100%, max(92cqh, 300px));
   margin: 0 0 2cqh;
   padding: 0;
   list-style: none;
@@ -217,6 +217,7 @@ canvas:active {
 
 .overlay .shop-item .level {
   margin-left: 1cqh;
+  white-space: nowrap;
   color: #06d6a0;
   font-size: clamp(10px, 2.3cqh, 14px);
   font-weight: 700;
@@ -256,6 +257,42 @@ canvas:active {
   .overlay .shop-item .effect {
     display: none;
   }
+}
+
+/* Very small arenas (an upright phone): the menu needs every pixel. */
+@container (max-height: 240px) {
+  .overlay .how-to {
+    display: none;
+  }
+
+  .overlay h1 {
+    margin-bottom: 1cqh;
+  }
+
+  #shop h1 {
+    display: none; /* the coin line is enough of a header */
+  }
+
+  .overlay .shop-list {
+    gap: 0.7cqh;
+    margin-bottom: 1.3cqh;
+  }
+
+  .overlay .shop-item {
+    padding: 0.7cqh 2cqh;
+  }
+
+  .overlay .shop-item button,
+  #shop-back {
+    min-height: 30px;
+    padding-block: 0.7cqh;
+  }
+}
+
+/* Safety net: if the shop is ever taller than the arena, scroll instead of cutting it off. */
+#shop {
+  overflow-y: auto;
+  justify-content: safe center;
 }
 
 /* "Press M" only makes sense with a keyboard; hide it on touch screens. */
