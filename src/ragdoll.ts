@@ -16,6 +16,18 @@ const COLORS = {
   leg: "#06d6a0",
 };
 
+// A joint pins a point on one body to a point on another.
+// Points are measured from each body's center. Joints are slightly soft and
+// damped: fully stiff joints can fight the floor and make limbs twitch forever.
+function joint(
+  bodyA: Matter.Body,
+  pointA: Matter.Vector,
+  bodyB: Matter.Body,
+  pointB: Matter.Vector,
+): Matter.Constraint {
+  return Constraint.create({ bodyA, pointA, bodyB, pointB, length: 0, stiffness: 0.6, damping: 0.1 });
+}
+
 /** Creates a ragdoll whose torso is centered at (x, y). */
 export function createRagdoll(x: number, y: number): Ragdoll {
   // Parts in the same negative group never collide with each other,
@@ -54,17 +66,6 @@ export function createRagdoll(x: number, y: number): Ragdoll {
   const lowerLegL = Bodies.rectangle(x - 9, y + 95, 12, 40, options(COLORS.leg));
   const upperLegR = Bodies.rectangle(x + 9, y + 55, 14, 40, options(COLORS.leg));
   const lowerLegR = Bodies.rectangle(x + 9, y + 95, 12, 40, options(COLORS.leg));
-
-  // A joint pins a point on one body to a point on another.
-  // Points are measured from each body's center. Joints are slightly soft and
-  // damped: fully stiff joints can fight the floor and make limbs twitch forever.
-  const joint = (
-    bodyA: Matter.Body,
-    pointA: Matter.Vector,
-    bodyB: Matter.Body,
-    pointB: Matter.Vector,
-  ) =>
-    Constraint.create({ bodyA, pointA, bodyB, pointB, length: 0, stiffness: 0.6, damping: 0.1 });
 
   const joints = [
     joint(torso, { x: 0, y: -35 }, head, { x: 0, y: 18 }), // neck

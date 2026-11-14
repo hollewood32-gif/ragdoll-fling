@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "lint": "oxlint",
     "typecheck": "tsc",
+    "test": "vitest run",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "deploy": "npm run build && wrangler deploy"
@@ -15,8 +17,10 @@
   },
   "devDependencies": {
     "@types/matter-js": "^0.20.2",
+    "oxlint": "^1.93.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.8",
+    "vitest": "^5.1.0",
     "wrangler": "^4.162.0"
   }
 }
