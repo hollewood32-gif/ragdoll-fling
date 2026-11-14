@@ -6,6 +6,10 @@
 // change makes old records unfair (v2: held hits now score 25%).
 export const STORAGE_KEY = "ragdoll-fling:best-score-v2";
 
+// "Pure best" only counts rounds played with upgrades switched off, so it
+// measures skill rather than how much someone has played.
+export const PURE_STORAGE_KEY = "ragdoll-fling:pure-best-v2";
+
 /** The two localStorage methods we use. Tests pass a fake with the same shape. */
 export interface ScoreStorage {
   getItem(key: string): string | null;
@@ -21,10 +25,10 @@ export function getBrowserStorage(): ScoreStorage | undefined {
   }
 }
 
-/** Reads the saved best score. Anything missing or invalid counts as 0. */
-export function loadBestScore(storage: ScoreStorage | undefined): number {
+/** Reads a saved best score. Anything missing or invalid counts as 0. */
+export function loadBestScore(storage: ScoreStorage | undefined, key = STORAGE_KEY): number {
   try {
-    const raw = storage?.getItem(STORAGE_KEY);
+    const raw = storage?.getItem(key);
     if (raw == null) return 0;
     const value = Number(raw);
     return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
@@ -41,10 +45,11 @@ export function recordScore(
   storage: ScoreStorage | undefined,
   score: number,
   previousBest: number,
+  key = STORAGE_KEY,
 ): { best: number; isNewBest: boolean } {
   if (score <= previousBest) return { best: previousBest, isNewBest: false };
   try {
-    storage?.setItem(STORAGE_KEY, String(score));
+    storage?.setItem(key, String(score));
   } catch {
     // Storage is full or blocked: still celebrate, just don't remember it.
   }

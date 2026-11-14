@@ -32,6 +32,9 @@ export const CONFIG = {
   // The same body part can't score again until this many milliseconds pass.
   hitCooldownMs: 120,
 
+  // Currency: one coin for every this-many points of damage in a round.
+  damagePerCoin: 100,
+
   // Speed cap for ragdoll parts, so they don't fly through walls.
   maxSpeed: 45,
 };

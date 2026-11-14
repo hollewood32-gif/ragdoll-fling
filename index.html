@@ -33,7 +33,10 @@
           <li><strong>Throw it</strong>: slams while you're still holding on score only a quarter</li>
           <li><strong>Chain hits</strong> quickly for a combo, up to x5</li>
         </ul>
-        <p id="menu-best" class="best-line" hidden>Best: <span id="menu-best-score">0</span></p>
+        <p id="menu-best" class="best-line" hidden>
+          Best: <span id="menu-best-score">0</span> · Pure best: <span id="menu-pure-best">0</span>
+        </p>
+        <p class="coin-line">Coins: <span id="menu-coins">0</span></p>
         <div class="buttons">
           <button id="play">Play</button>
           <button id="sound-toggle" class="secondary" aria-pressed="true">Sound: On</button>
@@ -53,7 +56,8 @@
           <div><dt>Best combo</dt><dd id="stat-combo">x1.00</dd></div>
           <div><dt>Throws</dt><dd id="stat-throws">0</dd></div>
         </dl>
-        <p class="best-line">Best: <span id="best-score">0</span></p>
+        <p id="coins-earned" class="coin-line">+0 coins</p>
+        <p class="best-line">Best: <span id="best-score">0</span> · Pure best: <span id="pure-best-score">0</span></p>
         <div class="buttons">
           <button id="restart">Play again</button>
           <button id="to-menu" class="secondary">Menu</button>
