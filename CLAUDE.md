@@ -58,7 +58,7 @@ Original game, inspired by the *feel* of old ragdoll sandbox toys, not a copy of
 1. [x] Game design interview, saved here.
 2. [x] Setup: check for Git, Node.js, GitHub CLI. Help install anything missing. Owner logs in to GitHub and Cloudflare themselves. (Done 2026-11-13. Cloudflare login moved to phase 5, when Wrangler is installed.)
 3. [x] Prototype: smallest playable version on the owner's computer (timed round, score, restart). (Done 2026-11-13. Also has combos and juice. Fixed a bug where a resting ragdoll's twitching limb scored free points; hits now need `minBodySpeed`. Open balance question: holding and pumping the ragdoll against a wall scores very high.)
-4. [ ] GitHub: create repo, push code, open the first pull request, protect `main`.
+4. [x] GitHub: create repo, push code, open the first pull request, protect `main`. (Done 2026-11-13. Repo: https://github.com/hollewood32-gif/ragdoll-fling. PR #1 added the README and was merged by the owner.)
 5. [ ] First deploy: deploy once by command to see what the pipeline will automate, then connect the subdomain.
 6. [ ] CI/CD: build the pipeline above. Prove it by opening a PR with a failing test and showing it gets blocked.
 7. [ ] Feature PRs: best-score memory, start menu, sound effects, polish, then mobile controls. After those (post-v1, decided 2026-11-13): currency and upgrades, as several small PRs.
@@ -71,5 +71,8 @@ Original game, inspired by the *feel* of old ragdoll sandbox toys, not a copy of
 - Read this file first. Check the status checkboxes above to see where we left off, and update them as phases finish.
 - Keep each PR small and reviewable so the owner can explain every change.
 - Machine: Windows 11, PowerShell. Tools installed with winget: Git 2.56, Node.js 26 LTS (npm 11), GitHub CLI 2.104. The owner is logged in to the GitHub CLI over HTTPS.
-- This folder is a Git repo on branch `main` with no commits yet. Nothing has been pushed.
+- Git workflow: `main` is protected by a GitHub ruleset ("Protect main": PR required, 0 approvals, no force push, no deletion). Every change, including CLAUDE.md updates, goes on a branch, then a PR. The owner reads and merges PRs themselves. After a merge: `git switch main`, `git pull`, `git branch -d <branch>`.
+- When Phase 6 adds CI, add its checks as required status checks in the ruleset.
+- PowerShell 5.1 quirks: piping a here-string into `git commit -F -` adds an invisible BOM to the message, so use several `-m` flags instead. Avoid `--jq` filters that contain `"` or `\(`.
+- `.claude/` is gitignored (local launch config with this machine's Node path). `.gitattributes` forces LF line endings.
 - After installing tools, an already-open shell may not see them until PATH is reloaded or a new terminal is opened.
