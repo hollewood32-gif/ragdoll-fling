@@ -35,6 +35,15 @@ export const CONFIG = {
   // Currency: one coin for every this-many points of damage in a round.
   damagePerCoin: 100,
 
+  // Upgrades: price of levels 1 to 5 (each about x1.75 the one before).
+  upgradePrices: [500, 900, 1600, 2800, 5000],
+  // What one level of each upgrade adds.
+  upgradeRoundSecondsPerLevel: 3,
+  upgradeDamagePerLevel: 0.1, // +10% damage
+  upgradeComboWindowPerLevel: 0.15, // seconds
+  upgradeBouncePerLevel: 0.1, // wall bounciness ("restitution"), from 0.4 up to 0.9
+  baseWallBounce: 0.4,
+
   // Speed cap for ragdoll parts, so they don't fly through walls.
   maxSpeed: 45,
 };

@@ -146,6 +146,12 @@ export class Sound {
     [523, 659, 784, 1047].forEach((freq, i) => this.tone(freq, 0.14, "square", 0.14, 0.55 + i * 0.1));
   }
 
+  /** Shop purchase: a bright two-note "ka-ching". */
+  buy(): void {
+    this.tone(988, 0.08, "square", 0.14);
+    this.tone(1319, 0.18, "square", 0.14, 0.07);
+  }
+
   /** Button press. */
   click(): void {
     this.tone(660, 0.05, "triangle", 0.15);

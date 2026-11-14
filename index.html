@@ -41,6 +41,10 @@
           <button id="play">Play</button>
           <button id="sound-toggle" class="secondary" aria-pressed="true">Sound: On</button>
         </div>
+        <div class="buttons">
+          <button id="menu-shop" class="secondary">Shop</button>
+          <button id="upgrades-toggle" class="secondary" aria-pressed="true">Upgrades: On</button>
+        </div>
         <p class="hint">Press M to mute or unmute any time</p>
         <p class="rotate-hint">Turn your phone sideways for a bigger arena</p>
       </div>
@@ -60,8 +64,18 @@
         <p class="best-line">Best: <span id="best-score">0</span> · Pure best: <span id="pure-best-score">0</span></p>
         <div class="buttons">
           <button id="restart">Play again</button>
+          <button id="results-shop" class="secondary">Shop</button>
           <button id="to-menu" class="secondary">Menu</button>
         </div>
+      </div>
+
+      <!-- Shop. Rows are built in code from the UPGRADES list in src/upgrades.ts. -->
+      <div id="shop" class="overlay" hidden>
+        <h1>Shop</h1>
+        <p class="coin-line">Coins: <span id="shop-coins">0</span></p>
+        <ul id="shop-list" class="shop-list"></ul>
+        <p class="shop-note">Upgrades apply from your next round. Rounds with upgrades on don't count for Pure best.</p>
+        <button id="shop-back" class="secondary">Back</button>
       </div>
     </main>
     <script type="module" src="/src/main.ts"></script>
