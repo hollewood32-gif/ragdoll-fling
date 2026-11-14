@@ -32,6 +32,7 @@ Other commands:
 | `npm test` | Runs the unit tests (Vitest) |
 | `npm run deploy:staging` | Builds and deploys to staging by hand (normally the pipeline does this) |
 | `npm run deploy:production` | Builds and deploys to production by hand (normally the pipeline does this) |
+| `npm run approve` | Approves the production deploy that's waiting for review (uses the GitHub CLI) |
 
 ## How it's built
 

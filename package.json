@@ -6,10 +6,11 @@
   "scripts": {
     "dev": "vite",
     "lint": "oxlint",
-    "typecheck": "tsc",
+    "typecheck": "tsc && tsc -p worker",
     "test": "vitest run",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "approve": "node scripts/approve-production.mjs",
     "deploy:staging": "npm run build && wrangler deploy --env staging",
     "deploy:production": "npm run build && wrangler deploy --env=\"\""
   },
@@ -17,6 +18,7 @@
     "matter-js": "^0.20.0"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261114.1",
     "@types/matter-js": "^0.20.2",
     "oxlint": "^1.93.0",
     "typescript": "^7.0.2",
