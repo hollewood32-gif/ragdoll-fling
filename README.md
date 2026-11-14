@@ -28,7 +28,10 @@ Other commands:
 | `npm run typecheck` | Checks the TypeScript code for type errors |
 | `npm run build` | Type-checks, then builds the playable site into `dist/` |
 | `npm run preview` | Serves the built `dist/` folder locally |
-| `npm run deploy` | Builds, then deploys to Cloudflare Workers (needs `npx wrangler login` first) |
+| `npm run lint` | Checks the code for mistakes and risky patterns (Oxlint) |
+| `npm test` | Runs the unit tests (Vitest) |
+| `npm run deploy:staging` | Builds and deploys to staging by hand (normally the pipeline does this) |
+| `npm run deploy:production` | Builds and deploys to production by hand (normally the pipeline does this) |
 
 ## How it's built
 
@@ -47,4 +50,8 @@ Other commands:
 
 ## How changes are made
 
-`main` is protected: every change goes through a pull request. Automated checks and preview deploys are coming next.
+`main` is protected: every change goes through a pull request, and GitHub Actions does the rest.
+
+1. **Every pull request** runs lint, type-check, tests and a build (`.github/workflows/ci.yml`). The PR can't be merged unless these pass. The build is also uploaded as a preview, and a playable link is commented on the PR.
+2. **Merging to `main`** deploys automatically to staging: https://fling-staging.jeffreydoughty.com (`.github/workflows/deploy.yml`).
+3. **Production** (https://fling.jeffreydoughty.com) gets the exact same build, but only after the owner approves the deploy in GitHub.
