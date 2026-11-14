@@ -2,7 +2,7 @@
 
 A browser physics game. Grab the ragdoll, fling it into the walls, and rack up as much damage as you can in 30 seconds.
 
-> Working title. A live link will be added once the game is deployed.
+**Play it: https://fling.jeffreydoughty.com**
 
 ## How to play
 
@@ -28,12 +28,14 @@ Other commands:
 | `npm run typecheck` | Checks the TypeScript code for type errors |
 | `npm run build` | Type-checks, then builds the playable site into `dist/` |
 | `npm run preview` | Serves the built `dist/` folder locally |
+| `npm run deploy` | Builds, then deploys to Cloudflare Workers (needs `npx wrangler login` first) |
 
 ## How it's built
 
 - **TypeScript**, bundled with **Vite**
 - **HTML Canvas** for drawing. Every shape is drawn in code; there are no image files.
 - **Matter.js** for 2D physics: the ragdoll is ten bodies connected by joints.
+- Hosted on **Cloudflare Workers** as static assets. The setup lives in `wrangler.jsonc`, not in dashboard settings.
 - A hand-written game loop that steps the physics in fixed 1/60-second slices, so the game behaves the same on fast and slow screens.
 
 | File | Job |

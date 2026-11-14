@@ -47,11 +47,13 @@ Original game, inspired by the *feel* of old ragdoll sandbox toys, not a copy of
   - Production deploys from staging after the owner manually approves.
 - Stretch goal: online high-score leaderboard with a small API and a Cloudflare D1 database, migrations run by the pipeline.
 
-## Blanks to fill in later (needed by phase 5)
+## Domain and names (filled in during phase 5)
 
-- Game name / subdomain: TBD
-- Domain: TBD
-- Registrar: TBD
+- Game subdomain / Worker name: `fling` (repo is still `ragdoll-fling`, the working title)
+- Domain: jeffreydoughty.com
+- Registrar / DNS: Cloudflare (DNS already on Cloudflare, so no nameserver move was needed)
+- Production: https://fling.jeffreydoughty.com. Staging (phase 6): `fling-staging.jeffreydoughty.com`
+- workers.dev address: https://fling.ragdoll-fling.workers.dev (Wrangler auto-registered the account subdomain `ragdoll-fling.workers.dev` on first deploy)
 
 ## Phase plan and status
 
@@ -59,7 +61,7 @@ Original game, inspired by the *feel* of old ragdoll sandbox toys, not a copy of
 2. [x] Setup: check for Git, Node.js, GitHub CLI. Help install anything missing. Owner logs in to GitHub and Cloudflare themselves. (Done 2026-11-13. Cloudflare login moved to phase 5, when Wrangler is installed.)
 3. [x] Prototype: smallest playable version on the owner's computer (timed round, score, restart). (Done 2026-11-13. Also has combos and juice. Fixed a bug where a resting ragdoll's twitching limb scored free points; hits now need `minBodySpeed`. Open balance question: holding and pumping the ragdoll against a wall scores very high.)
 4. [x] GitHub: create repo, push code, open the first pull request, protect `main`. (Done 2026-11-13. Repo: https://github.com/hollewood32-gif/ragdoll-fling. PR #1 added the README and was merged by the owner.)
-5. [ ] First deploy: deploy once by command to see what the pipeline will automate, then connect the subdomain.
+5. [x] First deploy: deploy once by command to see what the pipeline will automate, then connect the subdomain. (Done 2026-11-13. `npm run deploy` = build + `wrangler deploy`. Config in `wrangler.jsonc`: static assets from `dist/` plus the custom domain route.)
 6. [ ] CI/CD: build the pipeline above. Prove it by opening a PR with a failing test and showing it gets blocked.
 7. [ ] Feature PRs: best-score memory, start menu, sound effects, polish, then mobile controls. After those (post-v1, decided 2026-11-13): currency and upgrades, as several small PRs.
    - Draft idea: coins earned from round damage (e.g. 1 per 100). A shop between rounds with upgrades like +round time, +damage %, longer combo window, higher max multiplier, bouncier walls. Progress saved in localStorage.
@@ -75,4 +77,6 @@ Original game, inspired by the *feel* of old ragdoll sandbox toys, not a copy of
 - When Phase 6 adds CI, add its checks as required status checks in the ruleset.
 - PowerShell 5.1 quirks: piping a here-string into `git commit -F -` adds an invisible BOM to the message, so use several `-m` flags instead. Avoid `--jq` filters that contain `"` or `\(`.
 - `.claude/` is gitignored (local launch config with this machine's Node path). `.gitattributes` forces LF line endings.
-- After installing tools, an already-open shell may not see them until PATH is reloaded or a new terminal is opened.
+- After installing tools, an already-open shell may not see them until PATH is reloaded or a new terminal is opened. The Claude app's Terminal panel was opened before the installs and has a stale PATH.
+- The owner's own PowerShell blocks scripts (default execution policy), so `npx`/`npm` resolve to blocked `.ps1` files. Tell the owner to use `npx.cmd` / `npm.cmd`. Don't change the execution policy.
+- Wrangler is logged in as the owner via OAuth (`npx wrangler whoami` to check). In Claude's PowerShell, `Invoke-WebRequest` needs TLS 1.2; `curl.exe` is simpler for URL checks.
