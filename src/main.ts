@@ -24,6 +24,12 @@ const finalScoreText = document.getElementById("final-score")!;
 const bestScoreText = document.getElementById("best-score")!;
 const newBestBadge = document.getElementById("new-best")!;
 const restartButton = document.getElementById("restart")!;
+const toMenuButton = document.getElementById("to-menu")!;
+
+const menuScreen = document.getElementById("menu")!;
+const menuBestLine = document.getElementById("menu-best")!;
+const menuBestScore = document.getElementById("menu-best-score")!;
+const playButton = document.getElementById("play")!;
 
 // ---------------------------------------------------------------------------
 // Physics world: gravity, four walls, one ragdoll
@@ -53,8 +59,8 @@ function respawnRagdoll(): void {
 // ---------------------------------------------------------------------------
 // Game state
 // ---------------------------------------------------------------------------
-type Phase = "ready" | "playing" | "results";
-let phase: Phase = "ready";
+type Phase = "menu" | "ready" | "playing" | "results";
+let phase: Phase = "menu";
 let timeLeft = CONFIG.roundSeconds;
 let score = 0;
 const combo = new Combo();
@@ -91,7 +97,7 @@ function toWorld(e: PointerEvent): Matter.Vector {
 }
 
 canvas.addEventListener("pointerdown", (e) => {
-  if (phase === "results") return;
+  if (phase === "menu" || phase === "results") return;
   const point = toWorld(e);
   const body = Query.point(ragdoll.parts, point)[0];
   if (!body) return;
@@ -183,7 +189,8 @@ Events.on(engine, "beforeUpdate", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Round flow: ready -> playing -> results -> (restart) -> ready
+// Round flow: menu -> ready -> playing -> results -> (Play again) ready
+//                                                  -> (Menu) menu
 // ---------------------------------------------------------------------------
 function endRound(): void {
   phase = "results";
@@ -200,9 +207,10 @@ function endRound(): void {
   restartButton.focus();
 }
 
-function restart(): void {
+// Puts everything back to the start of a round.
+function resetRound(): void {
+  release();
   respawnRagdoll();
-  phase = "ready";
   timeLeft = CONFIG.roundSeconds;
   score = 0;
   combo.reset();
@@ -212,7 +220,31 @@ function restart(): void {
   shake = 0;
   resultsScreen.hidden = true;
 }
+
+function restart(): void {
+  resetRound();
+  phase = "ready"; // the clock starts on the first grab
+}
+
+function showMenu(): void {
+  resetRound();
+  phase = "menu";
+  menuBestScore.textContent = bestScore.toLocaleString();
+  menuBestLine.hidden = bestScore <= 0;
+  menuScreen.hidden = false;
+  playButton.focus();
+}
+
+function startFromMenu(): void {
+  menuScreen.hidden = true;
+  phase = "ready";
+}
+
 restartButton.addEventListener("click", restart);
+toMenuButton.addEventListener("click", showMenu);
+playButton.addEventListener("click", startFromMenu);
+
+showMenu(); // the game opens on the start menu
 
 // ---------------------------------------------------------------------------
 // Update: game rules that run every physics step
@@ -312,6 +344,7 @@ function draw(): void {
 
 // Score, timer and combo. Drawn without shake so they stay readable.
 function drawHud(): void {
+  if (phase === "menu") return; // the menu covers the screen
   ctx.fillStyle = "#ffffff";
   ctx.textBaseline = "top";
   ctx.font = "800 28px system-ui, sans-serif";

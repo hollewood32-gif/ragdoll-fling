@@ -80,6 +80,45 @@ canvas:active {
   display: none;
 }
 
+.overlay .tagline {
+  margin-bottom: 20px;
+  font-size: 18px;
+  color: #ccd;
+}
+
+.overlay .how-to {
+  margin: 0 0 20px;
+  padding: 0;
+  list-style: none;
+  text-align: center;
+  line-height: 1.7;
+  color: #aab;
+}
+
+.overlay .how-to strong {
+  color: #fff;
+}
+
+.overlay .best-line[hidden] {
+  display: none;
+}
+
+.overlay .buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.overlay button.secondary {
+  background: transparent;
+  color: #ccd;
+  box-shadow: inset 0 0 0 2px #3a3a5c;
+}
+
+.overlay button.secondary:hover {
+  background: #2a2a45;
+  color: #fff;
+}
+
 .overlay .best-line {
   margin-bottom: 24px;
   font-size: 18px;
