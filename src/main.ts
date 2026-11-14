@@ -6,6 +6,7 @@ import { CONFIG } from "./config";
 import { getBrowserStorage, loadBestScore, recordScore } from "./bestScore";
 import { createRagdoll, wholeBodySpeed, type Ragdoll } from "./ragdoll";
 import { Combo, damageFromSpeed } from "./scoring";
+import { loadMuted, saveMuted, Sound } from "./sound";
 
 const { Engine, Composite, Bodies, Body, Constraint, Events, Query, Vector } = Matter;
 const W = CONFIG.width;
@@ -30,6 +31,7 @@ const menuScreen = document.getElementById("menu")!;
 const menuBestLine = document.getElementById("menu-best")!;
 const menuBestScore = document.getElementById("menu-best-score")!;
 const playButton = document.getElementById("play")!;
+const soundToggle = document.getElementById("sound-toggle")!;
 
 // ---------------------------------------------------------------------------
 // Physics world: gravity, four walls, one ragdoll
@@ -68,6 +70,9 @@ const combo = new Combo();
 // Best score, remembered on this device between visits.
 const storage = getBrowserStorage();
 let bestScore = loadBestScore(storage);
+
+// Sound effects. The mute setting is remembered like the best score.
+const sound = new Sound(loadMuted(storage));
 
 // "Juice": floating damage numbers, screen shake, and white flashes on hit parts.
 interface FloatingText {
@@ -116,7 +121,10 @@ canvas.addEventListener("pointerdown", (e) => {
   });
   Composite.add(engine.world, grab);
 
-  if (phase === "ready") phase = "playing"; // the first grab starts the clock
+  if (phase === "ready") {
+    phase = "playing"; // the first grab starts the clock
+    sound.start();
+  }
 });
 
 canvas.addEventListener("pointermove", (e) => {
@@ -167,6 +175,9 @@ function registerHit(part: Matter.Body, impactSpeed: number): void {
   const points = Math.round(damage * multiplier);
   score += points;
 
+  sound.impact(damage);
+  if (combo.count > 1) sound.combo(combo.count);
+
   floaters.push({
     x: part.position.x,
     y: part.position.y,
@@ -203,6 +214,9 @@ function endRound(): void {
   bestScoreText.textContent = bestScore.toLocaleString();
   newBestBadge.hidden = !result.isNewBest;
 
+  sound.end();
+  if (result.isNewBest) sound.newBest();
+
   resultsScreen.hidden = false;
   restartButton.focus();
 }
@@ -222,6 +236,7 @@ function resetRound(): void {
 }
 
 function restart(): void {
+  sound.click();
   resetRound();
   phase = "ready"; // the clock starts on the first grab
 }
@@ -236,13 +251,36 @@ function showMenu(): void {
 }
 
 function startFromMenu(): void {
+  sound.unlock(); // browsers only allow sound after a click like this one
+  sound.click();
   menuScreen.hidden = true;
   phase = "ready";
 }
 
+function updateSoundToggle(): void {
+  soundToggle.textContent = sound.muted ? "Sound: Off" : "Sound: On";
+  soundToggle.setAttribute("aria-pressed", String(!sound.muted));
+}
+
+function toggleMute(): void {
+  sound.unlock();
+  sound.setMuted(!sound.muted);
+  saveMuted(storage, sound.muted);
+  updateSoundToggle();
+  sound.click(); // only heard when turning sound back on
+}
+
 restartButton.addEventListener("click", restart);
-toMenuButton.addEventListener("click", showMenu);
+toMenuButton.addEventListener("click", () => {
+  sound.click();
+  showMenu();
+});
 playButton.addEventListener("click", startFromMenu);
+soundToggle.addEventListener("click", toggleMute);
+window.addEventListener("keydown", (e) => {
+  if (e.key === "m" || e.key === "M") toggleMute();
+});
+updateSoundToggle();
 
 showMenu(); // the game opens on the start menu
 
@@ -251,7 +289,11 @@ showMenu(); // the game opens on the start menu
 // ---------------------------------------------------------------------------
 function update(dt: number): void {
   if (phase === "playing") {
+    const secondsBefore = Math.ceil(timeLeft);
     timeLeft -= dt;
+    const secondsAfter = Math.ceil(timeLeft);
+    // Tick once per second during the last 5 seconds.
+    if (secondsAfter < secondsBefore && secondsAfter >= 1 && secondsAfter <= 5) sound.tick();
     if (timeLeft <= 0) endRound();
   }
 
