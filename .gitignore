@@ -1,0 +1,12 @@
+# Libraries downloaded by npm. Anyone can recreate this with `npm install`.
+node_modules/
+
+# Build output. Recreated by `npm run build`.
+dist/
+
+# Claude app settings for this computer only (local paths, permissions)
+.claude/
+
+# Editor and OS clutter
+.DS_Store
+Thumbs.db

@@ -1,0 +1,33 @@
+// All the "feel" numbers live here so they are easy to tweak.
+
+export const CONFIG = {
+  // Size of the game world in pixels. The canvas is scaled to fit the window.
+  width: 960,
+  height: 600,
+
+  // Length of one round, in seconds.
+  roundSeconds: 30,
+
+  // Walls are thick so a fast-moving ragdoll can't slip through them.
+  wallThickness: 200,
+
+  // Impacts slower than this deal no damage (stops tiny bumps from scoring).
+  minImpactSpeed: 4,
+
+  // The ragdoll as a whole (its center of mass) must be moving at least this
+  // fast for a hit to count. This stops a resting ragdoll whose limb is
+  // twitching against the floor from earning free points.
+  minBodySpeed: 1.5,
+
+  // A combo continues if the next hit lands within this many seconds.
+  comboWindowSeconds: 1.0,
+  // Each hit in a combo adds this much to the multiplier, up to maxMultiplier.
+  comboStep: 0.25,
+  maxMultiplier: 5,
+
+  // The same body part can't score again until this many milliseconds pass.
+  hitCooldownMs: 120,
+
+  // Speed cap for ragdoll parts, so they don't fly through walls.
+  maxSpeed: 45,
+};

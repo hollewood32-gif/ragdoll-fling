@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ragdoll Fling</title>
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="game"></canvas>
+
+      <!-- Results screen. Hidden until the round ends. -->
+      <div id="results" class="overlay" hidden>
+        <h1>Time's up!</h1>
+        <p>Total damage</p>
+        <p id="final-score" class="big">0</p>
+        <button id="restart">Play again</button>
+      </div>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
