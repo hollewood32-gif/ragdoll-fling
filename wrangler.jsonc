@@ -1,0 +1,22 @@
+// Cloudflare Workers configuration ("infrastructure as code").
+// `npx wrangler deploy` reads this file and makes Cloudflare match it.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+
+  // The Worker's name in your Cloudflare account. It also gives the free
+  // address: https://fling.<your-account>.workers.dev
+  "name": "fling",
+
+  // Locks in which version of the Workers runtime behavior we get,
+  // so a Cloudflare update can't silently change how the site runs.
+  "compatibility_date": "2026-11-01",
+
+  // This game is a static site: Cloudflare serves the files Vite builds
+  // into dist/. No server code is needed (yet; the leaderboard will add some).
+  "assets": {
+    "directory": "./dist"
+  },
+
+  // Keep the free *.workers.dev address switched on.
+  "workers_dev": true
+}
