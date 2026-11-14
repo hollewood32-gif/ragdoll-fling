@@ -188,10 +188,72 @@ canvas:active {
   color: #fff;
 }
 
+/* ---------------------------------------------------------------------------
+   Shop
+   --------------------------------------------------------------------------- */
+.overlay .shop-list {
+  display: grid;
+  gap: 1.3cqh;
+  width: min(100%, 92cqh);
+  margin: 0 0 2cqh;
+  padding: 0;
+  list-style: none;
+}
+
+.overlay .shop-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2cqh;
+  padding: 1.3cqh 2cqh;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  text-align: left;
+}
+
+.overlay .shop-item strong {
+  font-size: clamp(13px, 3cqh, 18px);
+}
+
+.overlay .shop-item .level {
+  margin-left: 1cqh;
+  color: #06d6a0;
+  font-size: clamp(10px, 2.3cqh, 14px);
+  font-weight: 700;
+}
+
+.overlay .shop-item .effect {
+  display: block;
+  color: #aab;
+  font-size: clamp(10px, 2.3cqh, 14px);
+}
+
+.overlay .shop-item button {
+  flex-shrink: 0;
+  min-width: 18cqh;
+  padding: 1.3cqh 2.7cqh;
+  font-size: clamp(12px, 2.7cqh, 16px);
+}
+
+.overlay .shop-item button:disabled {
+  background: #3a3a5c;
+  color: #889;
+  cursor: default;
+}
+
+.overlay .shop-note {
+  max-width: 90cqh;
+  margin-bottom: 2cqh;
+  font-size: clamp(10px, 2.2cqh, 13px);
+  color: #889;
+}
+
 /* Small arenas (phones): drop the longer text so the essentials fit. */
 @container (max-height: 320px) {
   .overlay .tagline,
-  .overlay .how-to li:nth-child(n + 2) {
+  .overlay .how-to li:nth-child(n + 2),
+  .overlay .shop-note,
+  .overlay .shop-item .effect {
     display: none;
   }
 }

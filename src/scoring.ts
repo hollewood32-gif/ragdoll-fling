@@ -27,6 +27,8 @@ export function pointsForHit(damage: number, multiplier: number, held: boolean):
 /** Tracks how many hits landed in quick succession. */
 export class Combo {
   count = 0;
+  /** How long the player has to land the next hit. The combo upgrade raises this. */
+  windowSeconds = CONFIG.comboWindowSeconds;
   private timeSinceHit = Infinity;
 
   /** Current score multiplier: 1, 1.25, 1.5, ... up to the max. */
@@ -37,7 +39,7 @@ export class Combo {
 
   /** Call when a hit lands. Returns the multiplier for that hit. */
   hit(): number {
-    if (this.timeSinceHit > CONFIG.comboWindowSeconds) this.count = 0;
+    if (this.timeSinceHit > this.windowSeconds) this.count = 0;
     this.count += 1;
     this.timeSinceHit = 0;
     return this.multiplier;
@@ -46,7 +48,7 @@ export class Combo {
   /** Call every frame. Breaks the combo if the player paused too long. */
   update(dtSeconds: number): void {
     this.timeSinceHit += dtSeconds;
-    if (this.timeSinceHit > CONFIG.comboWindowSeconds) this.count = 0;
+    if (this.timeSinceHit > this.windowSeconds) this.count = 0;
   }
 
   reset(): void {

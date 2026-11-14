@@ -77,6 +77,14 @@ describe("Combo", () => {
     expect(combo.hit()).toBe(1 + CONFIG.comboStep);
   });
 
+  it("keeps a combo alive longer when the window is widened", () => {
+    const combo = new Combo();
+    combo.windowSeconds = 1.75;
+    combo.hit();
+    combo.update(1.5); // too slow for the normal 1s window
+    expect(combo.hit()).toBe(1 + CONFIG.comboStep);
+  });
+
   it("resets back to the start", () => {
     const combo = new Combo();
     combo.hit();

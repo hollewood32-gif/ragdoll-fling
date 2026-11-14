@@ -9,6 +9,20 @@ import { GRAB_RADIUS, pickPart } from "./grab";
 import { createRagdoll, wholeBodySpeed, type Ragdoll } from "./ragdoll";
 import { Combo, damageFromSpeed, pointsForHit } from "./scoring";
 import { loadMuted, saveMuted, Sound } from "./sound";
+import {
+  buyUpgrade,
+  hasAnyUpgrade,
+  loadUpgrades,
+  loadUpgradesEnabled,
+  MAX_LEVEL,
+  nextPrice,
+  NO_UPGRADES,
+  roundSettings,
+  saveUpgrades,
+  saveUpgradesEnabled,
+  UPGRADES,
+  type RoundSettings,
+} from "./upgrades";
 import { RoundStats } from "./stats";
 
 const { Engine, Composite, Bodies, Body, Constraint, Events, Vector } = Matter;
@@ -42,6 +56,14 @@ const menuPureBest = document.getElementById("menu-pure-best")!;
 const menuCoins = document.getElementById("menu-coins")!;
 const playButton = document.getElementById("play")!;
 const soundToggle = document.getElementById("sound-toggle")!;
+const upgradesToggle = document.getElementById("upgrades-toggle")!;
+const menuShopButton = document.getElementById("menu-shop")!;
+const resultsShopButton = document.getElementById("results-shop")!;
+
+const shopScreen = document.getElementById("shop")!;
+const shopCoins = document.getElementById("shop-coins")!;
+const shopList = document.getElementById("shop-list")!;
+const shopBackButton = document.getElementById("shop-back")!;
 
 // ---------------------------------------------------------------------------
 // Physics world: gravity, four walls, one ragdoll
@@ -52,12 +74,13 @@ engine.gravity.y = 1;
 // The walls sit just outside the visible area, so the whole canvas is the arena.
 const t = CONFIG.wallThickness;
 const wallOptions = { isStatic: true, label: "wall" };
-Composite.add(engine.world, [
+const walls = [
   Bodies.rectangle(W / 2, H + t / 2, W + 2 * t, t, wallOptions), // floor
   Bodies.rectangle(W / 2, -t / 2, W + 2 * t, t, wallOptions), // ceiling
   Bodies.rectangle(-t / 2, H / 2, t, H + 2 * t, wallOptions), // left
   Bodies.rectangle(W + t / 2, H / 2, t, H + 2 * t, wallOptions), // right
-]);
+];
+Composite.add(engine.world, walls);
 
 let ragdoll: Ragdoll = createRagdoll(W / 2, H / 2);
 Composite.add(engine.world, ragdoll.composite);
@@ -84,6 +107,24 @@ let pureBest = loadBestScore(storage, PURE_STORAGE_KEY);
 
 // Coins, earned from damage at the end of each round.
 let coins = loadCoins(storage);
+
+// Upgrades bought in the shop, and the On/Off switch on the menu.
+let upgrades = loadUpgrades(storage);
+let upgradesEnabled = loadUpgradesEnabled(storage);
+// The numbers used for the current round (set at the start of each round).
+let settings: RoundSettings = roundSettings(NO_UPGRADES);
+// True when no upgrade is active this round, so it counts for Pure best.
+let roundIsPure = true;
+
+function applyRoundSettings(): void {
+  const active = upgradesEnabled ? upgrades : NO_UPGRADES;
+  settings = roundSettings(active);
+  roundIsPure = !hasAnyUpgrade(active);
+  combo.windowSeconds = settings.comboWindowSeconds;
+  // Matter.js uses the bouncier of the two bodies in a collision, and the
+  // ragdoll's parts have the base bounce, so raising the walls' bounce works.
+  for (const wall of walls) wall.restitution = settings.wallBounce;
+}
 
 // Sound effects. The mute setting is remembered like the best score.
 const sound = new Sound(loadMuted(storage));
@@ -221,7 +262,7 @@ function registerHit(part: Matter.Body, impactSpeed: number): void {
   const last = lastHitAt.get(part) ?? -Infinity;
   if (now - last < CONFIG.hitCooldownMs) return;
 
-  const damage = damageFromSpeed(impactSpeed);
+  const damage = Math.round(damageFromSpeed(impactSpeed) * settings.damageMultiplier);
   if (damage <= 0) return;
   lastHitAt.set(part, now);
 
@@ -252,13 +293,13 @@ function registerHit(part: Matter.Body, impactSpeed: number): void {
 function spawnSparks(part: Matter.Body, damage: number, held: boolean): void {
   const { x, y } = part.position;
   // Which wall is closest? Its inward direction is where the sparks fly.
-  const walls = [
+  const edges = [
     { dist: x, ox: 0, oy: y, nx: 1, ny: 0 }, // left
     { dist: W - x, ox: W, oy: y, nx: -1, ny: 0 }, // right
     { dist: y, ox: x, oy: 0, nx: 0, ny: 1 }, // ceiling
     { dist: H - y, ox: x, oy: H, nx: 0, ny: -1 }, // floor
   ];
-  const wall = walls.reduce((a, b) => (b.dist < a.dist ? b : a));
+  const wall = edges.reduce((a, b) => (b.dist < a.dist ? b : a));
 
   const count = held ? 3 : Math.min(24, 4 + Math.floor(damage / 10));
   const color = held ? "#9aa0b8" : (part.render.fillStyle ?? "#ffd166");
@@ -304,10 +345,9 @@ function endRound(): void {
   bestScoreText.textContent = bestScore.toLocaleString();
   newBestBadge.hidden = !result.isNewBest;
 
-  // Upgrades don't exist yet, so every round is "pure" for now.
-  // The upgrades PR will only record this when upgrades are switched off.
-  pureBest = recordScore(storage, score, pureBest, PURE_STORAGE_KEY).best;
-  pureBestText.textContent = formatRecord(pureBest);
+  // Pure best only counts rounds played without any active upgrades.
+  if (roundIsPure) pureBest = recordScore(storage, score, pureBest, PURE_STORAGE_KEY).best;
+  pureBestText.textContent = formatRecord(pureBest) + (roundIsPure ? "" : " (upgrades on: not counted)");
 
   const earned = coinsForScore(score);
   coins += earned;
@@ -334,7 +374,8 @@ function formatRecord(value: number): string {
 function resetRound(): void {
   release();
   respawnRagdoll();
-  timeLeft = CONFIG.roundSeconds;
+  applyRoundSettings(); // picks up anything bought or switched since last round
+  timeLeft = settings.roundSeconds;
   score = 0;
   combo.reset();
   stats.reset();
@@ -366,8 +407,92 @@ function showMenu(): void {
 function startFromMenu(): void {
   sound.unlock(); // browsers only allow sound after a click like this one
   sound.click();
+  resetRound(); // applies the Upgrades On/Off switch and any purchases
   menuScreen.hidden = true;
   phase = "ready";
+}
+
+// ---------------------------------------------------------------------------
+// Shop and the Upgrades On/Off switch
+// ---------------------------------------------------------------------------
+let shopOpenedFrom: HTMLElement = menuScreen; // the screen to go back to
+
+function openShop(from: HTMLElement): void {
+  sound.unlock();
+  sound.click();
+  shopOpenedFrom = from;
+  from.hidden = true;
+  renderShop();
+  shopScreen.hidden = false;
+  shopBackButton.focus();
+}
+
+function closeShop(): void {
+  sound.click();
+  shopScreen.hidden = true;
+  if (shopOpenedFrom === menuScreen) showMenu();
+  else shopOpenedFrom.hidden = false;
+}
+
+// Builds one row per upgrade: name, level, what it does now and next, and a Buy button.
+function renderShop(): void {
+  shopCoins.textContent = coins.toLocaleString();
+  shopList.replaceChildren(
+    ...UPGRADES.map((upgrade) => {
+      const level = upgrades[upgrade.id];
+      const price = nextPrice(level);
+
+      const item = document.createElement("li");
+      item.className = "shop-item";
+
+      const info = document.createElement("div");
+      const name = document.createElement("strong");
+      name.textContent = upgrade.name;
+      const levelText = document.createElement("span");
+      levelText.className = "level";
+      levelText.textContent = `Lv ${level}/${MAX_LEVEL}`;
+      const effect = document.createElement("span");
+      effect.className = "effect";
+      effect.textContent =
+        price === null ? upgrade.describe(level) : `${upgrade.describe(level)} → ${upgrade.describe(level + 1)}`;
+      info.append(name, levelText, effect);
+
+      const buy = document.createElement("button");
+      if (price === null) {
+        buy.textContent = "Maxed";
+        buy.disabled = true;
+      } else {
+        buy.textContent = `${price.toLocaleString()} coins`;
+        buy.disabled = coins < price;
+        buy.addEventListener("click", () => {
+          const result = buyUpgrade(upgrades, upgrade.id, coins);
+          if (!result) return;
+          upgrades = result.levels;
+          coins = result.coins;
+          saveUpgrades(storage, upgrades);
+          saveCoins(storage, coins);
+          sound.buy();
+          renderShop();
+        });
+      }
+
+      item.append(info, buy);
+      return item;
+    }),
+  );
+}
+
+function updateUpgradesToggle(): void {
+  upgradesToggle.textContent = upgradesEnabled ? "Upgrades: On" : "Upgrades: Off";
+  upgradesToggle.setAttribute("aria-pressed", String(upgradesEnabled));
+}
+
+function toggleUpgrades(): void {
+  sound.unlock();
+  sound.click();
+  upgradesEnabled = !upgradesEnabled;
+  saveUpgradesEnabled(storage, upgradesEnabled);
+  updateUpgradesToggle();
 }
 
 function updateSoundToggle(): void {
@@ -394,6 +519,12 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "m" || e.key === "M") toggleMute();
 });
 updateSoundToggle();
+
+menuShopButton.addEventListener("click", () => openShop(menuScreen));
+resultsShopButton.addEventListener("click", () => openShop(resultsScreen));
+shopBackButton.addEventListener("click", closeShop);
+upgradesToggle.addEventListener("click", toggleUpgrades);
+updateUpgradesToggle();
 
 showMenu(); // the game opens on the start menu
 
