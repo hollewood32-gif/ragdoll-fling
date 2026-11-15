@@ -28,6 +28,9 @@ export const CONFIG = {
   // Each hit in a combo adds this much to the multiplier, up to maxMultiplier.
   comboStep: 0.25,
   maxMultiplier: 5,
+  // Variety combo: each extra weapon type used in the current combo raises
+  // the cap by 1 (throws only stay at maxMultiplier), up to this.
+  maxVarietyMultiplier: 10,
 
   // The same body part can't score again until this many milliseconds pass.
   hitCooldownMs: 120,

@@ -94,3 +94,52 @@ describe("Combo", () => {
     expect(combo.multiplier).toBe(1);
   });
 });
+
+/** Lands `n` hits from the same source. */
+function many(combo: Combo, n: number, source: string): void {
+  for (let i = 0; i < n; i++) combo.hit(source);
+}
+
+describe("variety combo", () => {
+
+  it("stays capped at x5 with throws only (so Pure rounds don't change)", () => {
+    const combo = new Combo();
+    many(combo, 100, "throw");
+    expect(combo.multiplier).toBe(CONFIG.maxMultiplier);
+  });
+
+  it("raises the cap by 1 for each extra kind of hit", () => {
+    const combo = new Combo();
+    many(combo, 50, "throw");
+    combo.hit("bat");
+    expect(combo.cap).toBe(6);
+    many(combo, 10, "pistol");
+    expect(combo.cap).toBe(7);
+    expect(combo.multiplier).toBe(7);
+  });
+
+  it("never goes past x10", () => {
+    const combo = new Combo();
+    for (const source of ["throw", "fist", "bat", "axe", "pistol", "revolver", "grenade", "rpg"]) {
+      many(combo, 10, source);
+    }
+    expect(combo.cap).toBe(CONFIG.maxVarietyMultiplier);
+    expect(combo.multiplier).toBe(CONFIG.maxVarietyMultiplier);
+  });
+
+  it("forgets the kinds of hit when the combo breaks", () => {
+    const combo = new Combo();
+    combo.hit("throw");
+    combo.hit("bat");
+    combo.update(combo.windowSeconds + 0.1);
+    expect(combo.sources.size).toBe(0);
+    combo.hit("pistol");
+    expect(combo.cap).toBe(CONFIG.maxMultiplier);
+  });
+
+  it("counts the same weapon only once", () => {
+    const combo = new Combo();
+    many(combo, 20, "bat");
+    expect(combo.cap).toBe(CONFIG.maxMultiplier);
+  });
+});
