@@ -289,7 +289,11 @@ canvas:active {
   top: 11cqh;
   left: 50%;
   display: flex;
+  flex-wrap: wrap; /* with many weapons, wrap to a second row instead of overflowing */
+  justify-content: center;
   gap: 1cqh;
+  width: max-content;
+  max-width: 80%;
   transform: translateX(-50%);
 }
 
@@ -307,6 +311,7 @@ canvas:active {
   font: inherit;
   font-size: clamp(11px, 2.4cqh, 15px);
   font-weight: 700;
+  white-space: nowrap;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }

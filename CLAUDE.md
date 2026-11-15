@@ -98,34 +98,36 @@ Original game, inspired by the *feel* of old ragdoll sandbox toys, not a copy of
 - **API token:** needs Account → D1 → Edit in addition to the Workers permissions.
 - **Local testing:** `npx wrangler d1 migrations apply DB --local --env staging`, then `wrangler dev --env staging` serves the game and API on http://localhost:8787.
 
-9. [ ] Weapons. In progress, as five PRs:
-   - [x] PR: save the design below.
-   - [ ] PR: shop tabs (Upgrades | Weapons), buying and levelling, weapon bar and 1-9 keys, the Fist, spiked walls.
-   - [ ] PR: Bat and Axe.
-   - [ ] PR: Pistol and Revolver.
-   - [ ] PR: Grenade, Cluster bomb, Cannon and RPG.
+9. [x] Weapons. (Done 2026-11-15.) Built as:
+   - [x] PR #23: save the design below.
+   - [x] PR #24: shop tabs (Upgrades | Weapons), buying and levelling, weapon bar and 1-9 keys, the Fist, spiked walls.
+   - [x] PR #25: Bat and Axe (reworked in playtesting: the hitting end follows the pointer, not the handle).
+   - [x] PR #26 and #27: Pistol and Revolver (#26 shipped tap-to-shoot; #27 is the playtested hold-to-fire rework, merged separately because #26 was merged before it was pushed).
+   - [x] PR #28: Grenade, Cluster bomb, Cannon and RPG.
 
-### Weapons design (approved 2026-11-14)
+### Weapons design (approved 2026-11-14, controls updated after playtesting 2026-11-15)
 
-- **Controls:** pressing on the dummy still grabs and throws it. Switch weapons with keys 1-9 or by tapping the weapon bar along the bottom of the arena (phones have no number keys).
-  - **Melee (Fist, Bat, Axe) are swung:** press on empty space and the weapon appears in your hand as a real physics object. Swing it into the dummy while holding; let go to put it away. Damage scales with swing speed times the weapon's power, so harder swings hit harder. Works the same on phones.
-  - **Guns and explosives are tapped:** a tap or click (press and release without moving) on empty space fires at that spot.
-- **Cooldowns:** each body part can only take a swing hit every so often (like `hitCooldownMs`), and each gun or explosive has a fire cooldown, so spam can't break scoring. The weapon bar shows when a weapon is ready.
+- **Controls:** pressing on the dummy always grabs and throws it. Pressing empty space uses the selected weapon. Switch weapons with keys 1-9 or by tapping the weapon bar near the top of the arena (phones have no number keys).
+  - **Swung (Fist, Bat, Axe):** the weapon appears in your hand as a real physics object. Its hitting end (fist, bat barrel, axe blade) follows the pointer and the handle trails behind. Damage scales with the speed of the point that touches the dummy. Let go to put it away.
+  - **Guns (Pistol, Revolver, Cannon, RPG):** held at the pointer and auto-aimed at the dummy's center; hold to keep firing. Bullets and rockets check their whole path each step (`Matter.Query.ray`) so they can't skip through thin limbs. The Cannon aims high so gravity drops its ball onto the dummy (`launchAngle`).
+  - **Thrown (Grenade, Cluster bomb):** held like the Fist, then flung: letting go keeps the hand's speed. The fuse starts when it leaves the hand.
+- **Explosions:** every body part within the radius takes damage (full at the center, a quarter at the edge) and is thrown outward. A whole blast counts as one hit for the combo.
+- **Cooldowns:** a swung weapon scores at most one hit per its cooldown; guns and thrown weapons have a reload. The weapon bar shows reloads as a draining dark fill.
 - **Scoring:** weapon hits deal damage and build the combo. Their knockback sets up wall hits.
 - **Weapons** (key, how it works, buy price):
-  1. Fist: swing it, light punches. Free, owned from the start.
-  2. Bat: swing it, long reach, medium damage, huge knockback. 1,000.
-  3. Axe: swing it, heavy, big damage, little knockback. 2,000.
-  4. Pistol: tap to shoot, fast small shots. 1,500.
-  5. Revolver: tap to shoot, slow heavy shots. 3,000.
-  6. Grenade: tap to throw it there, explodes after 1 s. 2,500.
-  7. Cluster bomb: like the grenade, then splits into 4 smaller blasts. 5,000.
-  8. Cannon: fires a heavy ball from the nearest wall toward the tap. 4,000.
-  9. RPG: fires a rocket from the nearest wall that explodes on contact. 7,500.
+  1. Fist: swing, light punches. Free, owned from the start.
+  2. Bat: swing, long reach, huge knockback. 1,000.
+  3. Axe: swing, heavy, big damage, little knockback. 2,000.
+  4. Pistol: hold to fire a fast stream (50 a bullet). 1,500.
+  5. Revolver: hold to fire slow heavy shots (200, huge kick). 3,000.
+  6. Grenade: hold and fling, explodes 1 s later. 2,500.
+  7. Cluster bomb: like the grenade, and the blast throws out 4 bomblets. 5,000.
+  8. Cannon: hold to lob heavy cannonballs that hurt on impact. 4,000.
+  9. RPG: hold to fire rockets that speed up and explode on contact. 7,500.
   - Spiked walls (no key, passive): every wall hit does +25% damage. 3,000.
-- **Levels:** buying gives level 1. Four more levels each add +15% damage and knockback (spiked walls: +10% per level). Level-up prices are 0.5x, 1x, 1.5x and 2x the buy price.
-- **Pure best:** the Upgrades Off switch also disables every weapon, the Fist included, so Pure rounds and the leaderboard stay throws-only.
-- **Art and sound:** shapes and sounds made in code, like the rest of the game (tracer lines, blast circles, a rocket with a trail).
+- **Levels:** buying gives level 1. Four more levels each add +15% damage and knockback (spiked walls: +10% per level). Level-up prices are 0.5x, 1x, 1.5x and 2x the buy price (the free Fist is priced like a 1,000-coin weapon).
+- **Pure best:** the Upgrades Off switch also disables every weapon, the Fist included. With upgrades on, a round still counts as Pure unless a weapon lands a hit or spiked walls are active.
+- **Art and sound:** shapes and sounds made in code, like the rest of the game.
 - All numbers (damage, knockback, cooldowns, prices) live in `config.ts` and get tuned after playtesting.
 
 ## Notes for future sessions

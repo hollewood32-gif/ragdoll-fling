@@ -144,6 +144,32 @@ export class Sound {
     }
   }
 
+  /** An explosion: a long rumble of muffled noise over a deep falling boom. */
+  explosion(big: boolean): void {
+    const ctx = this.ready();
+    if (!ctx || !this.noise) return;
+    const now = ctx.currentTime;
+    const length = big ? 0.6 : 0.35;
+
+    const rumble = ctx.createBufferSource();
+    rumble.buffer = this.noise;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(big ? 1800 : 2500, now);
+    filter.frequency.exponentialRampToValueAtTime(120, now + length);
+    rumble.connect(filter).connect(this.envelope(ctx, now, big ? 0.9 : 0.5, length));
+    rumble.start(now);
+    rumble.stop(now + length + 0.05);
+
+    const boom = ctx.createOscillator();
+    boom.type = "sine";
+    boom.frequency.setValueAtTime(big ? 90 : 130, now);
+    boom.frequency.exponentialRampToValueAtTime(30, now + length);
+    boom.connect(this.envelope(ctx, now, big ? 0.8 : 0.4, length));
+    boom.start(now);
+    boom.stop(now + length + 0.05);
+  }
+
   /** A short blip that rises in pitch as the combo grows. */
   combo(comboCount: number): void {
     this.tone(comboPitch(comboCount), 0.08, "triangle", 0.18);

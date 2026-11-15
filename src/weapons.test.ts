@@ -3,9 +3,11 @@
 import { describe, expect, it } from "vitest";
 import type { ScoreStorage } from "./bestScore";
 import {
+  blastFalloff,
   buyWeapon,
   cooldownLeft,
   loadSelectedWeapon,
+  launchAngle,
   loadWeapons,
   MAX_WEAPON_LEVEL,
   nextWeaponPrice,
@@ -25,7 +27,7 @@ function memory(initial: Record<string, string> = {}): ScoreStorage {
 
 describe("starting weapons", () => {
   it("gives everyone the Fist, and nothing else", () => {
-    expect(STARTING_WEAPONS).toEqual({ fist: 1, bat: 0, axe: 0, pistol: 0, revolver: 0, spikes: 0 });
+    expect(Object.entries(STARTING_WEAPONS).filter(([, level]) => level > 0)).toEqual([["fist", 1]]);
   });
 });
 
@@ -101,7 +103,7 @@ describe("bat and axe", () => {
     expect(nextWeaponPrice("bat", 0)).toBe(1000);
     expect(nextWeaponPrice("axe", 0)).toBe(2000);
     expect(nextWeaponPrice("axe", 1)).toBe(1000);
-    const keys = selectableWeapons({ fist: 1, bat: 1, axe: 1, pistol: 0, revolver: 0, spikes: 1 }).map((w) => w.key);
+    const keys = selectableWeapons({ ...STARTING_WEAPONS, bat: 1, axe: 1, spikes: 1 }).map((w) => w.key);
     expect(keys).toEqual([1, 2, 3]);
   });
 });
@@ -110,7 +112,7 @@ describe("guns", () => {
   it("cost 1,500 and 3,000, and use keys 4 and 5", () => {
     expect(nextWeaponPrice("pistol", 0)).toBe(1500);
     expect(nextWeaponPrice("revolver", 0)).toBe(3000);
-    const all = { fist: 1, bat: 1, axe: 1, pistol: 1, revolver: 1, spikes: 1 };
+    const all = { ...STARTING_WEAPONS, bat: 1, axe: 1, pistol: 1, revolver: 1, spikes: 1 };
     expect(selectableWeapons(all).map((w) => w.key)).toEqual([1, 2, 3, 4, 5]);
   });
 
@@ -119,5 +121,48 @@ describe("guns", () => {
     expect(cooldownLeft(1250, 1000, 500)).toBeCloseTo(0.5);
     expect(cooldownLeft(2000, 1000, 500)).toBe(0);
     expect(cooldownLeft(0, -Infinity, 500)).toBe(0);
+  });
+});
+
+describe("explosives", () => {
+  it("cost 2,500 to 7,500 and use keys 6 to 9", () => {
+    expect(nextWeaponPrice("grenade", 0)).toBe(2500);
+    expect(nextWeaponPrice("cluster", 0)).toBe(5000);
+    expect(nextWeaponPrice("cannon", 0)).toBe(4000);
+    expect(nextWeaponPrice("rpg", 0)).toBe(7500);
+    const all = Object.fromEntries(Object.keys(STARTING_WEAPONS).map((id) => [id, 1])) as typeof STARTING_WEAPONS;
+    expect(selectableWeapons(all).map((w) => w.key)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  });
+
+  it("blasts hit hardest at the center and fade to a quarter at the edge", () => {
+    expect(blastFalloff(0, 100)).toBe(1);
+    expect(blastFalloff(50, 100)).toBeCloseTo(0.625);
+    expect(blastFalloff(99.9, 100)).toBeCloseTo(0.25, 2);
+    expect(blastFalloff(100, 100)).toBe(0);
+  });
+
+  it("aims a cannonball so gravity drops it on the target", () => {
+    const speed = 20;
+    const gravity = 0.3;
+    for (const [dx, dy] of [[400, 0], [-300, 100], [250, -80]]) {
+      const angle = launchAngle(dx, dy, speed, gravity)!;
+      // Fly it step by step and check it passes close to the target.
+      let x = 0;
+      let y = 0;
+      let vx = Math.cos(angle) * speed;
+      let vy = Math.sin(angle) * speed;
+      let closest = Infinity;
+      for (let step = 0; step < 200; step++) {
+        x += vx;
+        y += vy;
+        vy += gravity;
+        closest = Math.min(closest, Math.hypot(x - dx, y - dy));
+      }
+      expect(closest).toBeLessThan(speed); // within one step of travel
+    }
+  });
+
+  it("says when a target is out of range", () => {
+    expect(launchAngle(5000, 0, 10, 0.3)).toBeNull();
   });
 });

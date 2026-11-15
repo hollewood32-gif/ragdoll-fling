@@ -1,16 +1,25 @@
 // Weapons: what they cost, how levels work, and how they're saved.
 // No drawing or physics here, so the rules can be unit tested.
 //
-// Weapons arrive over several PRs. Only the ones listed in WEAPONS are in the
-// shop; a later PR adds the explosives to this list.
+// Every weapon listed in WEAPONS is sold in the shop.
 
 import type { ScoreStorage } from "./bestScore";
 import { CONFIG } from "./config";
 
-export type WeaponId = "fist" | "bat" | "axe" | "pistol" | "revolver" | "spikes";
+export type WeaponId =
+  | "fist"
+  | "bat"
+  | "axe"
+  | "pistol"
+  | "revolver"
+  | "grenade"
+  | "cluster"
+  | "cannon"
+  | "rpg"
+  | "spikes";
 
-/** "melee" is swung, "gun" fires on a tap, "passive" is always on once bought. */
-export type WeaponKind = "melee" | "gun" | "passive";
+/** "melee" is swung, "thrown" is flung by hand, "gun" fires while held, "passive" is always on once bought. */
+export type WeaponKind = "melee" | "thrown" | "gun" | "passive";
 
 export interface WeaponInfo {
   id: WeaponId;
@@ -69,6 +78,38 @@ export const WEAPONS: WeaponInfo[] = [
     key: 5,
     price: CONFIG.revolver.price,
     describe: (level) => `Hold to fire, huge kick · ${Math.round(CONFIG.revolver.damage * weaponPower(level))} damage a bullet`,
+  },
+  {
+    id: "grenade",
+    name: "Grenade",
+    kind: "thrown",
+    key: 6,
+    price: CONFIG.grenade.price,
+    describe: (level) => `Hold, fling, boom after 1 s · ${Math.round(CONFIG.grenade.damage * weaponPower(level))} blast`,
+  },
+  {
+    id: "cluster",
+    name: "Cluster bomb",
+    kind: "thrown",
+    key: 7,
+    price: CONFIG.cluster.price,
+    describe: (level) => `Like a grenade, plus ${CONFIG.cluster.bomblets} bomblets · ${Math.round(CONFIG.cluster.damage * weaponPower(level))} blast`,
+  },
+  {
+    id: "cannon",
+    name: "Cannon",
+    kind: "gun",
+    key: 8,
+    price: CONFIG.cannon.price,
+    describe: (level) => `Hold to lob heavy cannonballs · ${Math.round(weaponPower(level) * 100)}% power`,
+  },
+  {
+    id: "rpg",
+    name: "RPG",
+    kind: "gun",
+    key: 9,
+    price: CONFIG.rpg.price,
+    describe: (level) => `Hold to fire rockets · ${Math.round(CONFIG.rpg.damage * weaponPower(level))} blast`,
   },
   // Passive weapons have no key and go last.
   {
@@ -189,4 +230,35 @@ export function saveSelectedWeapon(storage: ScoreStorage | undefined, id: Weapon
 export function cooldownLeft(nowMs: number, lastFiredMs: number, cooldownMs: number): number {
   if (cooldownMs <= 0) return 0;
   return Math.min(1, Math.max(0, 1 - (nowMs - lastFiredMs) / cooldownMs));
+}
+
+// ---------------------------------------------------------------------------
+// Explosives
+// ---------------------------------------------------------------------------
+
+/**
+ * How much of a blast reaches something this far from its center: full
+ * strength at the center, a quarter at the edge, nothing outside.
+ */
+export function blastFalloff(distance: number, radius: number): number {
+  if (distance >= radius) return 0;
+  return 1 - 0.75 * (Math.max(0, distance) / radius);
+}
+
+/**
+ * The angle to fire a projectile at `speed` so gravity drops it onto a target
+ * `dx` across and `dy` down (screen coordinates: +y is down). Picks the lower,
+ * flatter of the two possible arcs. Returns null if the target is out of range.
+ * Units are per physics step: speed in pixels/step, gravity in pixels/step².
+ */
+export function launchAngle(dx: number, dy: number, speed: number, gravity: number): number | null {
+  if (gravity <= 0) return Math.atan2(dy, dx);
+  const up = -dy; // the usual formula wants +y up
+  const v2 = speed * speed;
+  const root = v2 * v2 - gravity * (gravity * dx * dx + 2 * up * v2);
+  if (root < 0) return null;
+  const flat = Math.atan2(v2 - Math.sqrt(root), gravity * Math.abs(dx)); // angle above horizontal
+  const ux = Math.cos(flat) * Math.sign(dx || 1);
+  const uy = -Math.sin(flat); // back to screen coordinates
+  return Math.atan2(uy, ux);
 }

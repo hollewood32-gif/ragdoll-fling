@@ -37,6 +37,8 @@ import {
   weaponInfo,
   cooldownLeft,
   weaponPower,
+  blastFalloff,
+  launchAngle,
   WEAPONS,
   type WeaponId,
   type WeaponLevels,
@@ -213,7 +215,8 @@ const MAX_SPARKS = 300;
 const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 const shakeScale = (): number => (reducedMotionQuery.matches ? 0.15 : 1);
 
-const stats = new RoundStats();const flashes = new Map<Matter.Body, number>(); // body -> seconds of flash left
+const stats = new RoundStats();
+const flashes = new Map<Matter.Body, number>(); // body -> seconds of flash left
 const lastHitAt = new Map<Matter.Body, number>(); // body -> time of last scoring hit (ms)
 let lastSwingHitAt = -Infinity; // time of the last scoring swing hit (ms)
 
@@ -269,9 +272,9 @@ canvas.addEventListener("pointerdown", (e) => {
   const radius = e.pointerType === "mouse" ? GRAB_RADIUS.mouse : GRAB_RADIUS.touch;
   const target = pickPart(ragdoll.parts, point, radius);
   if (!target) {
-    // Pressed empty space: pick up the selected weapon (swung or gun).
+    // Pressed empty space: pick up the selected weapon (swung, thrown or gun).
     const kind = activeWeapons[selectedWeapon] > 0 ? weaponInfo(selectedWeapon).kind : null;
-    if (kind === "melee") {
+    if (kind === "melee" || (kind === "thrown" && weaponReady(selectedWeapon))) {
       capturePointer(e);
       pickUpWeapon(selectedWeapon, point, e.pointerId);
       startClock();
@@ -317,7 +320,9 @@ function release(): void {
 // The player letting go counts as a throw (release() is also used for resets).
 function onPointerUp(e: PointerEvent): void {
   if (held && e.pointerId === held.pointerId) {
-    putAwayWeapon();
+    // Letting go of a grenade throws it; letting go of anything else puts it away.
+    if (weaponInfo(held.id).kind === "thrown") throwBomb();
+    else putAwayWeapon();
     return;
   }
   if (gunHeld && e.pointerId === gunHeld.pointerId) {
@@ -396,6 +401,16 @@ function buildWeapon(id: WeaponId, at: Matter.Vector): BuiltWeapon {
       hold: Vector.sub(headCenter, body.position), // the blade is under the pointer
       handle: Vector.sub({ x: at.x - length / 2 + 6, y: at.y }, body.position),
     };
+  }
+  if (id === "grenade" || id === "cluster") {
+    // Labelled "bomb", not "weapon": a held bomb doesn't deal swing damage.
+    const body = Bodies.circle(at.x, at.y, id === "grenade" ? CONFIG.grenade.radius : CONFIG.cluster.radius, {
+      label: "bomb",
+      density: 0.004,
+      collisionFilter: weaponFilter,
+      render: { fillStyle: id === "grenade" ? "#3d6b45" : "#7a2e3b" },
+    });
+    return { body, hold: { x: 0, y: 0 }, handle: { x: 0, y: 0 } };
   }
   const body = Bodies.circle(at.x, at.y, CONFIG.fist.radius, {
     label: "weapon",
@@ -491,6 +506,8 @@ Events.on(engine, "collisionStart", (event) => {
     } else if (hitBy.label === "weapon" && held) {
       const contact = pair.collision.supports?.[0] ?? held.body.position;
       swingHit(part, held, pair.collision.normal, { x: contact.x, y: contact.y });
+    } else if (hitBy.label === "cannonball") {
+      cannonballHit(part, hitBy, pair.collision.normal);
     }
   }
 });
@@ -533,9 +550,33 @@ function gunStats(id: WeaponId) {
   return GUN_STATS[id as keyof typeof GUN_STATS] ?? null;
 }
 
-const GUN_LENGTH = { pistol: 30, revolver: 42 }; // grip to muzzle, for drawing and firing
+// How far each held gun kicks back when it fires (pixels).
+const RECOIL: Partial<Record<WeaponId, number>> = { pistol: 5, revolver: 12, cannon: 16, rpg: 10 };
 
-const lastShotAt = new Map<WeaponId, number>(); // gun -> game time of its last shot (ms)
+// Grip to muzzle, for drawing and firing.
+const GUN_LENGTH: Partial<Record<WeaponId, number>> = { pistol: 30, revolver: 42, cannon: 48, rpg: 60 };
+
+// Time between uses for weapons that fire or get thrown (swung weapons have none).
+const COOLDOWN_MS: Partial<Record<WeaponId, number>> = {
+  pistol: CONFIG.pistol.cooldownMs,
+  revolver: CONFIG.revolver.cooldownMs,
+  cannon: CONFIG.cannon.cooldownMs,
+  rpg: CONFIG.rpg.cooldownMs,
+  grenade: CONFIG.grenade.cooldownMs,
+  cluster: CONFIG.cluster.cooldownMs,
+};
+
+const lastShotAt = new Map<WeaponId, number>(); // weapon -> game time it was last fired or thrown (ms)
+
+/** How much of a weapon's cooldown is left: 1 just used, 0 ready. */
+function cooldownFraction(id: WeaponId): number {
+  const ms = COOLDOWN_MS[id];
+  return ms ? cooldownLeft(engine.timing.timestamp, lastShotAt.get(id) ?? -Infinity, ms) : 0;
+}
+
+function weaponReady(id: WeaponId): boolean {
+  return cooldownFraction(id) === 0;
+}
 
 // The gun in the player's hand.
 interface GunHeld {
@@ -590,25 +631,25 @@ function aimAt(from: Matter.Vector): number {
 // Every physics step while a gun is held: aim at the dummy and fire when reloaded.
 function updateGun(): void {
   if (!gunHeld) return;
-  gunHeld.angle = aimAt(gunHeld.at);
+  const { id } = gunHeld;
+  // The Cannon aims high so gravity drops its ball onto the dummy.
+  gunHeld.angle = id === "cannon" ? cannonAngle(gunHeld.at) : aimAt(gunHeld.at);
   gunHeld.recoil *= 0.8;
-  if (phase !== "playing") return;
+  if (phase !== "playing" || !weaponReady(id)) return;
+  lastShotAt.set(id, engine.timing.timestamp);
 
-  const gun = gunStats(gunHeld.id);
-  if (!gun) return;
-  const now = engine.timing.timestamp;
-  if (cooldownLeft(now, lastShotAt.get(gunHeld.id) ?? -Infinity, gun.cooldownMs) > 0) return;
-  lastShotAt.set(gunHeld.id, now);
-
-  const heavy = gunHeld.id === "revolver";
   const dir = { x: Math.cos(gunHeld.angle), y: Math.sin(gunHeld.angle) };
-  const length = heavy ? GUN_LENGTH.revolver : GUN_LENGTH.pistol;
-  const muzzle = Vector.add(gunHeld.at, Vector.mult(dir, length));
-  if (bullets.length < MAX_BULLETS) {
-    bullets.push({ ...muzzle, vx: dir.x * CONFIG.bulletSpeed, vy: dir.y * CONFIG.bulletSpeed, id: gunHeld.id });
+  const muzzle = Vector.add(gunHeld.at, Vector.mult(dir, GUN_LENGTH[id] ?? 30));
+  const heavy = id !== "pistol";
+  if (id === "cannon") {
+    fireCannonball(muzzle, dir);
+  } else if (id === "rpg") {
+    rockets.push({ ...muzzle, angle: gunHeld.angle, speed: CONFIG.rpg.startSpeed });
+  } else if (bullets.length < MAX_BULLETS) {
+    bullets.push({ ...muzzle, vx: dir.x * CONFIG.bulletSpeed, vy: dir.y * CONFIG.bulletSpeed, id });
   }
   shotFlashes.push({ ...muzzle, life: 0.08, heavy });
-  gunHeld.recoil = heavy ? 12 : 5;
+  gunHeld.recoil = RECOIL[id] ?? 5;
   shake = Math.max(shake, (heavy ? 5 : 1.5) * shakeScale());
   sound.shot(heavy);
 }
@@ -652,6 +693,256 @@ function bulletHit(part: Matter.Body, bullet: Bullet): void {
   // Knock the part along the bullet's path, plus a little lift to keep it airborne.
   const kick = Vector.add(Vector.mult(dir, gun.knockback * power), { x: 0, y: -1.5 });
   Body.setVelocity(part, Vector.add(part.velocity, kick));
+}
+
+// ---------------------------------------------------------------------------
+// Explosives: grenades, cluster bombs, cannonballs and rockets
+// ---------------------------------------------------------------------------
+type BombKind = "grenade" | "cluster" | "bomblet";
+
+// A live bomb: a physics body that bounces around until its fuse runs out.
+interface Bomb {
+  body: Matter.Body;
+  kind: BombKind;
+  fuseLeft: number; // seconds
+  power: number; // the weapon's level multiplier when it was thrown
+}
+const bombs: Bomb[] = [];
+
+// Cannonballs are heavy physics bodies; they hurt on impact, not by exploding.
+interface Cannonball {
+  body: Matter.Body;
+  life: number; // seconds until it's cleaned up
+}
+const cannonballs: Cannonball[] = [];
+
+// Rockets fly straight, speeding up, and explode on the first thing they reach.
+// Like bullets, they check their whole path each step instead of being bodies.
+interface Rocket {
+  x: number;
+  y: number;
+  angle: number;
+  speed: number; // pixels per step
+}
+const rockets: Rocket[] = [];
+
+// The expanding fireball drawn for each explosion.
+interface Blast {
+  x: number;
+  y: number;
+  radius: number;
+  life: number; // seconds left
+}
+const blasts: Blast[] = [];
+const BLAST_SECONDS = 0.35;
+
+const bombFilter = { category: CATEGORY.weapon, mask: CATEGORY.ragdoll | CATEGORY.wall };
+
+/** Gravity's pull per physics step, in pixels per step squared. */
+function gravityPerStep(): number {
+  const stepMs = 1000 / 60;
+  return engine.gravity.y * engine.gravity.scale * stepMs * stepMs;
+}
+
+/** Letting go of a held grenade: it keeps the hand's speed and its fuse starts. */
+function throwBomb(): void {
+  if (!held) return;
+  const { body, id } = held;
+  held = null;
+  const speed = Vector.magnitude(body.velocity);
+  if (speed > CONFIG.maxThrowSpeed) Body.setVelocity(body, Vector.mult(body.velocity, CONFIG.maxThrowSpeed / speed));
+  body.collisionFilter = { ...bombFilter, group: 0 };
+  body.frictionAir = 0.005;
+  body.restitution = 0.5;
+  const kind = id === "cluster" ? "cluster" : "grenade";
+  const fuseMs = kind === "cluster" ? CONFIG.cluster.fuseMs : CONFIG.grenade.fuseMs;
+  bombs.push({ body, kind, fuseLeft: fuseMs / 1000, power: weaponPower(activeWeapons[id]) });
+  lastShotAt.set(id, engine.timing.timestamp);
+}
+
+// Every physics step: burn down fuses and set off any bomb that's ready.
+function updateBombs(dt: number): void {
+  for (let i = bombs.length - 1; i >= 0; i--) {
+    const bomb = bombs[i];
+    bomb.fuseLeft -= dt;
+    const { x, y } = bomb.body.position;
+    const escaped = x < -50 || x > W + 50 || y < -50 || y > H + 50;
+    if (bomb.fuseLeft > 0 && !escaped) continue;
+
+    bombs.splice(i, 1);
+    Composite.remove(engine.world, bomb.body);
+    if (escaped) continue;
+    const at = { x, y };
+    if (bomb.kind === "bomblet") {
+      const c = CONFIG.cluster;
+      explode(at, c.bombletBlastRadius, c.bombletDamage, c.bombletKnockback, bomb.power, false);
+    } else if (bomb.kind === "cluster") {
+      const c = CONFIG.cluster;
+      explode(at, c.blastRadius, c.damage, c.knockback, bomb.power, true);
+      scatterBomblets(at, bomb.power);
+    } else {
+      const g = CONFIG.grenade;
+      explode(at, g.blastRadius, g.damage, g.knockback, bomb.power, true);
+    }
+  }
+}
+
+// A cluster bomb's blast throws out small bombs in a fan, mostly upward.
+function scatterBomblets(at: Matter.Vector, power: number): void {
+  const c = CONFIG.cluster;
+  for (let i = 0; i < c.bomblets; i++) {
+    const angle = -Math.PI / 2 + (i - (c.bomblets - 1) / 2) * 0.6;
+    const body = Bodies.circle(at.x, at.y, c.bombletRadius, {
+      label: "bomb",
+      density: 0.004,
+      frictionAir: 0.005,
+      restitution: 0.5,
+      collisionFilter: bombFilter,
+      render: { fillStyle: "#c0485a" },
+    });
+    Body.setVelocity(body, { x: Math.cos(angle) * c.bombletSpeed, y: Math.sin(angle) * c.bombletSpeed });
+    Composite.add(engine.world, body);
+    bombs.push({ body, kind: "bomblet", fuseLeft: c.bombletFuseMs / 1000 + i * 0.08, power });
+  }
+}
+
+/**
+ * A blast: every body part within `radius` takes damage (less further out)
+ * and is thrown outward. The total counts as ONE hit, so a single explosion
+ * can't max out the combo by touching ten body parts.
+ */
+function explode(
+  at: Matter.Vector,
+  radius: number,
+  damage: number,
+  knockback: number,
+  power: number,
+  big: boolean,
+): void {
+  blasts.push({ x: at.x, y: at.y, radius, life: BLAST_SECONDS });
+  shake = Math.max(shake, (big ? 16 : 8) * shakeScale());
+  sound.explosion(big);
+  puff(at, big ? 14 : 7);
+  if (phase !== "playing") return;
+
+  let total = 0;
+  let nearest: Matter.Body | null = null;
+  let nearestDistance = Infinity;
+  for (const part of ragdoll.parts) {
+    const away = Vector.sub(part.position, at);
+    const distance = Vector.magnitude(away);
+    const strength = blastFalloff(distance, radius);
+    if (strength <= 0) continue;
+    total += damage * strength * power;
+    if (distance < nearestDistance) {
+      nearest = part;
+      nearestDistance = distance;
+    }
+    // Throw the part outward, with some lift so blasts launch the dummy.
+    const direction = distance > 1 ? Vector.normalise(away) : { x: 0, y: -1 };
+    const push = Vector.add(Vector.mult(direction, knockback * strength * power), { x: 0, y: -3 * strength });
+    Body.setVelocity(part, Vector.add(part.velocity, push));
+  }
+
+  if (nearest && registerHit(nearest, total, 0, { x: at.x, y: at.y, nx: 0, ny: -1 })) {
+    weaponUsed = true; // this round no longer counts for Pure best
+  }
+}
+
+/** The Cannon's barrel angle: high enough that gravity drops the ball on the dummy. */
+function cannonAngle(from: Matter.Vector): number {
+  const target = dummyCenter();
+  const angle = launchAngle(target.x - from.x, target.y - from.y, CONFIG.cannon.ballSpeed, gravityPerStep());
+  return angle ?? aimAt(from); // out of range: just point at it
+}
+
+function fireCannonball(at: Matter.Vector, dir: Matter.Vector): void {
+  const body = Bodies.circle(at.x, at.y, CONFIG.cannon.ballRadius, {
+    label: "cannonball",
+    density: 0.02, // very heavy: it shoves the dummy hard
+    frictionAir: 0,
+    restitution: 0.3,
+    collisionFilter: bombFilter,
+    render: { fillStyle: "#2b2d42" },
+  });
+  Body.setVelocity(body, Vector.mult(dir, CONFIG.cannon.ballSpeed));
+  Composite.add(engine.world, body);
+  cannonballs.push({ body, life: 4 });
+}
+
+// A cannonball hit a body part: damage from how fast it struck, plus a shove.
+function cannonballHit(part: Matter.Body, ball: Matter.Body, normal: Matter.Vector): void {
+  const relative = Vector.sub(ball.velocity, part.velocity);
+  const impactSpeed = Math.min(CONFIG.maxSwingSpeed, Math.abs(Vector.dot(relative, normal)));
+  const power = weaponPower(activeWeapons.cannon);
+  const damage = damageFromSpeed(impactSpeed) * CONFIG.cannon.damage * power;
+  const direction = Vector.magnitude(ball.velocity) > 0.5 ? Vector.normalise(ball.velocity) : { x: 0, y: -1 };
+  const origin = { x: ball.position.x, y: ball.position.y, nx: direction.x, ny: direction.y };
+  if (!registerHit(part, damage, CONFIG.hitCooldownMs, origin)) return;
+  weaponUsed = true;
+  Body.setVelocity(part, Vector.add(part.velocity, Vector.mult(direction, CONFIG.cannon.knockback * power)));
+}
+
+// Every physics step: clear away old cannonballs, move rockets, fade blasts.
+function updateProjectiles(dt: number): void {
+  for (let i = cannonballs.length - 1; i >= 0; i--) {
+    const ball = cannonballs[i];
+    ball.life -= dt;
+    const { x, y } = ball.body.position;
+    if (ball.life <= 0 || x < -50 || x > W + 50 || y < -50 || y > H + 50) {
+      Composite.remove(engine.world, ball.body);
+      cannonballs.splice(i, 1);
+    }
+  }
+
+  const r = CONFIG.rpg;
+  for (let i = rockets.length - 1; i >= 0; i--) {
+    const rocket = rockets[i];
+    rocket.speed = Math.min(r.maxSpeed, rocket.speed + r.acceleration);
+    const from = { x: rocket.x, y: rocket.y };
+    const to = {
+      x: rocket.x + Math.cos(rocket.angle) * rocket.speed,
+      y: rocket.y + Math.sin(rocket.angle) * rocket.speed,
+    };
+    const hitDummy = Query.ray(ragdoll.parts, from, to, 10).length > 0;
+    const hitWall = to.x < 0 || to.x > W || to.y < 0 || to.y > H;
+    if (hitDummy || hitWall) {
+      const at = { x: Math.min(W, Math.max(0, to.x)), y: Math.min(H, Math.max(0, to.y)) };
+      explode(at, r.blastRadius, r.damage, r.knockback, weaponPower(activeWeapons.rpg), true);
+      rockets.splice(i, 1);
+      continue;
+    }
+    rocket.x = to.x;
+    rocket.y = to.y;
+    // A smoky orange trail.
+    if (sparks.length < MAX_SPARKS) {
+      sparks.push({
+        x: from.x,
+        y: from.y,
+        vx: (Math.random() - 0.5) * 40,
+        vy: (Math.random() - 0.5) * 40,
+        life: 0.3,
+        maxLife: 0.3,
+        size: 3 + Math.random() * 3,
+        color: Math.random() < 0.5 ? "#f78c6b" : "#9aa0b8",
+      });
+    }
+  }
+
+  for (let i = blasts.length - 1; i >= 0; i--) {
+    blasts[i].life -= dt;
+    if (blasts[i].life <= 0) blasts.splice(i, 1);
+  }
+}
+
+/** Removes every bomb, cannonball, rocket and blast (for a new round). */
+function clearExplosives(): void {
+  for (const bomb of bombs) Composite.remove(engine.world, bomb.body);
+  for (const ball of cannonballs) Composite.remove(engine.world, ball.body);
+  bombs.length = 0;
+  cannonballs.length = 0;
+  rockets.length = 0;
+  blasts.length = 0;
 }
 
 // Grey dust where a bullet hits a wall.
@@ -830,6 +1121,7 @@ function resetRound(): void {
   lastShotAt.clear();
   shotFlashes.length = 0;
   bullets.length = 0;
+  clearExplosives();
   shake = 0;
   resultsScreen.hidden = true;
 }
@@ -1094,7 +1386,7 @@ function selectWeapon(id: WeaponId): void {
   renderWeaponBar();
 }
 
-// Bar buttons for guns, so their cooldown fill can be updated every frame.
+// Bar buttons for weapons with a cooldown, so their fill can be updated every frame.
 const gunButtons = new Map<WeaponId, HTMLButtonElement>();
 
 // Shown during a round when weapons are on. One button per owned weapon.
@@ -1116,19 +1408,16 @@ function renderWeaponBar(): void {
       button.append(key, weapon.name);
       button.setAttribute("aria-pressed", String(weapon.id === selectedWeapon));
       button.addEventListener("click", () => selectWeapon(weapon.id));
-      if (weapon.kind === "gun") gunButtons.set(weapon.id, button);
+      if (COOLDOWN_MS[weapon.id]) gunButtons.set(weapon.id, button);
       return button;
     }),
   );
 }
 
-// Every frame: a dark fill drains from each gun's button as it reloads.
+// Every frame: a dark fill drains from each button as its weapon reloads.
 function updateGunCooldowns(): void {
-  const now = engine.timing.timestamp;
   for (const [id, button] of gunButtons) {
-    const gun = gunStats(id);
-    const left = gun ? cooldownLeft(now, lastShotAt.get(id) ?? -Infinity, gun.cooldownMs) : 0;
-    button.style.setProperty("--cooldown", String(left));
+    button.style.setProperty("--cooldown", String(cooldownFraction(id)));
   }
 }
 
@@ -1238,6 +1527,8 @@ function update(dt: number): void {
   }
   updateGun();
   updateBullets();
+  updateBombs(dt);
+  updateProjectiles(dt);
   updateGunCooldowns();
 
   shake *= 0.88; // fade the shake out quickly
@@ -1315,6 +1606,7 @@ function draw(): void {
   ctx.lineCap = "butt";
 
   if (gunHeld) drawGun(gunHeld);
+  drawExplosives();
 
   // Sparks fade out as they die
   for (const s of sparks) {
@@ -1388,7 +1680,7 @@ function drawHud(): void {
     ctx.textBaseline = "middle";
     ctx.fillStyle = "rgba(255,255,255,0.85)";
     ctx.font = "700 26px system-ui, sans-serif";
-    ctx.fillText("Grab the ragdoll and fling it into the walls!", W / 2, H * 0.2);
+    ctx.fillText("Grab the ragdoll and fling it into the walls!", W / 2, H * 0.38); // below the weapon bar, even when it wraps
     if (!weaponBar.hidden) {
       ctx.font = "600 18px system-ui, sans-serif";
       ctx.fillStyle = "rgba(255,255,255,0.6)";
@@ -1396,8 +1688,10 @@ function drawHud(): void {
       const hint =
         weapon.kind === "gun"
           ? `Or hold empty space to fire your ${weapon.name}`
-          : `Or press empty space to swing your ${weapon.name}`;
-      ctx.fillText(hint, W / 2, H * 0.2 + 34);
+          : weapon.kind === "thrown"
+            ? `Or hold empty space, then fling your ${weapon.name}`
+            : `Or press empty space to swing your ${weapon.name}`;
+      ctx.fillText(hint, W / 2, H * 0.38 + 34);
     }
   }
 }
@@ -1427,38 +1721,110 @@ function drawSpikes(): void {
   }
 }
 
-// The held weapon. The Bat and Axe are drawn as their physics shapes (the
-// Axe is two shapes: handle and blade), with dark grip tape on the handle.
-// The held gun, drawn at the hand and turned toward the dummy. It flips when
-// aiming left so the grip always hangs down, and slides back on recoil.
+// The held gun, drawn at the hand and turned the way it's aiming. It flips
+// when aiming left so the grip always hangs down, and slides back on recoil.
 function drawGun(gun: GunHeld): void {
-  const heavy = gun.id === "revolver";
-  const length = heavy ? GUN_LENGTH.revolver : GUN_LENGTH.pistol;
+  const length = GUN_LENGTH[gun.id] ?? 30;
   ctx.save();
   ctx.translate(gun.at.x, gun.at.y);
   ctx.rotate(gun.angle);
   if (Math.cos(gun.angle) < 0) ctx.scale(1, -1);
   ctx.translate(-gun.recoil, 0);
 
-  ctx.fillStyle = "#4a4e69"; // grip
-  ctx.save();
-  ctx.rotate(0.35);
-  ctx.fillRect(-4, 0, 9, 16);
-  ctx.restore();
-  ctx.fillStyle = "#9aa0b8"; // body and barrel
-  ctx.fillRect(-6, -6, length + 6, heavy ? 8 : 7);
-  if (heavy) {
-    ctx.fillStyle = "#6c7086"; // the revolver's cylinder
-    ctx.beginPath();
-    ctx.arc(6, -2, 7, 0, Math.PI * 2);
-    ctx.fill();
+  if (gun.id === "cannon") {
+    ctx.fillStyle = "#2b2d42"; // a fat black barrel with a rim
+    ctx.fillRect(-10, -10, length + 10, 20);
+    ctx.fillStyle = "#4a4e69";
+    ctx.fillRect(length - 6, -12, 8, 24);
+  } else if (gun.id === "rpg") {
+    ctx.fillStyle = "#556b2f"; // a long green tube
+    ctx.fillRect(-20, -7, length + 20, 14);
+    ctx.fillStyle = "#4a4e69"; // grip
+    ctx.fillRect(4, 6, 8, 12);
+  } else {
+    const heavy = gun.id === "revolver";
+    ctx.fillStyle = "#4a4e69"; // grip
+    ctx.save();
+    ctx.rotate(0.35);
+    ctx.fillRect(-4, 0, 9, 16);
+    ctx.restore();
+    ctx.fillStyle = "#9aa0b8"; // body and barrel
+    ctx.fillRect(-6, -6, length + 6, heavy ? 8 : 7);
+    if (heavy) {
+      ctx.fillStyle = "#6c7086"; // the revolver's cylinder
+      ctx.beginPath();
+      ctx.arc(6, -2, 7, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
   ctx.restore();
 }
 
+// A bomb: its body, a dark band, and (once thrown) a fuse spark that blinks
+// faster as it burns down.
+function drawBomb(body: Matter.Body, fuseLeft: number | null): void {
+  drawBody(body);
+  const r = body.circleRadius ?? 8;
+  const { x, y } = body.position;
+  ctx.fillStyle = "rgba(0,0,0,0.3)";
+  ctx.fillRect(x - r, y - r * 0.2, r * 2, r * 0.4);
+  if (fuseLeft === null) return;
+  const blinkRate = fuseLeft < 0.3 ? 30 : 12;
+  if (Math.sin(performance.now() / 1000 * blinkRate) > 0) {
+    ctx.fillStyle = "#ffd166";
+    ctx.beginPath();
+    ctx.arc(x, y - r - 2, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// Bombs, cannonballs, rockets and fireballs.
+function drawExplosives(): void {
+  for (const bomb of bombs) drawBomb(bomb.body, bomb.fuseLeft);
+  for (const ball of cannonballs) drawBody(ball.body);
+
+  for (const rocket of rockets) {
+    ctx.save();
+    ctx.translate(rocket.x, rocket.y);
+    ctx.rotate(rocket.angle);
+    ctx.fillStyle = "#c9d1d9";
+    ctx.fillRect(-16, -4, 16, 8); // body
+    ctx.fillStyle = "#ef476f";
+    ctx.beginPath(); // nose
+    ctx.moveTo(0, -4);
+    ctx.lineTo(8, 0);
+    ctx.lineTo(0, 4);
+    ctx.fill();
+    ctx.fillStyle = "#ffd166";
+    ctx.fillRect(-22, -2, 6, 4); // flame
+    ctx.restore();
+  }
+
+  // Fireballs: an orange disc that grows and fades, with a white-hot core.
+  for (const blast of blasts) {
+    const age = 1 - blast.life / BLAST_SECONDS; // 0 new, 1 gone
+    ctx.globalAlpha = 1 - age;
+    ctx.fillStyle = "#f78c6b";
+    ctx.beginPath();
+    ctx.arc(blast.x, blast.y, blast.radius * (0.3 + 0.7 * age), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#fff4c2";
+    ctx.beginPath();
+    ctx.arc(blast.x, blast.y, blast.radius * 0.3 * (1 - age), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// The held weapon. The Bat and Axe are drawn as their physics shapes (the
+// Axe is two shapes: handle and blade), with dark grip tape on the handle.
 function drawHeldWeapon(weapon: HeldWeapon): void {
   if (weapon.id === "fist") {
     drawFist(weapon.body);
+    return;
+  }
+  if (weaponInfo(weapon.id).kind === "thrown") {
+    drawBomb(weapon.body, null);
     return;
   }
   const { body } = weapon;

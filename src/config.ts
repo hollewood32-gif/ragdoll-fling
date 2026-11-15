@@ -109,5 +109,55 @@ export const CONFIG = {
     knockback: 18, // ...with a huge kick...
     cooldownMs: 600, // ...fired slowly
   },
+
+  // Explosions hurt every body part within the blast radius (less further
+  // out) and throw them outward. A whole blast counts as one hit for scoring.
+  // Grenades and cluster bombs are held like the Fist and thrown by letting
+  // go: they keep the hand's speed. The fuse starts when they leave the hand.
+  maxThrowSpeed: 30, // pixels per step
+  grenade: {
+    price: 2500,
+    radius: 9,
+    fuseMs: 1000,
+    blastRadius: 150,
+    damage: 220,
+    knockback: 16,
+    cooldownMs: 700, // time before the next one is ready
+  },
+  cluster: {
+    price: 5000,
+    radius: 11,
+    fuseMs: 1000,
+    blastRadius: 120,
+    damage: 150,
+    knockback: 12,
+    cooldownMs: 1400,
+    bomblets: 4, // thrown out by the first blast...
+    bombletSpeed: 9,
+    bombletFuseMs: 500, // ...and each explodes this long after
+    bombletRadius: 6,
+    bombletBlastRadius: 90,
+    bombletDamage: 100,
+    bombletKnockback: 9,
+  },
+  // Cannon and RPG are held and auto-aimed like the guns.
+  cannon: {
+    price: 4000,
+    cooldownMs: 1200,
+    ballRadius: 14,
+    ballSpeed: 20, // the Cannon aims high enough for gravity to drop the ball onto the dummy
+    damage: 1.6, // times a thrown hit at the same speed
+    knockback: 6,
+  },
+  rpg: {
+    price: 7500,
+    cooldownMs: 2000,
+    startSpeed: 6, // rockets speed up as they fly
+    acceleration: 1,
+    maxSpeed: 30,
+    blastRadius: 180,
+    damage: 350,
+    knockback: 22,
+  },
   spikesPrice: 3000,
 };
