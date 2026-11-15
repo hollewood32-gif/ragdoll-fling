@@ -249,6 +249,78 @@ canvas:active {
   color: #889;
 }
 
+/* Upgrades | Weapons tabs at the top of the shop */
+.overlay .shop-tabs {
+  display: flex;
+  gap: 1cqh;
+  margin: 0 0 1.3cqh;
+}
+
+.overlay .shop-tabs .tab {
+  min-height: 32px;
+  padding: 0.8cqh 3.3cqh;
+  font-size: clamp(12px, 2.8cqh, 17px);
+  background: transparent;
+  color: #ccd;
+  box-shadow: inset 0 0 0 2px #3a3a5c;
+}
+
+.overlay .shop-tabs .tab[aria-selected="true"] {
+  background: #ffd166;
+  color: #0f0f1e;
+  box-shadow: none;
+}
+
+.overlay .shop-item .key {
+  margin-right: 1cqh;
+  padding: 0 0.8cqh;
+  border-radius: 4px;
+  background: #3a3a5c;
+  color: #fff;
+  font-size: clamp(10px, 2.2cqh, 13px);
+  font-weight: 700;
+}
+
+/* ---------------------------------------------------------------------------
+   Weapon bar: sits near the top of the arena, away from the ragdoll on the floor
+   --------------------------------------------------------------------------- */
+.weapon-bar {
+  position: absolute;
+  top: 11cqh;
+  left: 50%;
+  display: flex;
+  gap: 1cqh;
+  transform: translateX(-50%);
+}
+
+.weapon-bar[hidden] {
+  display: none;
+}
+
+.weapon-bar button {
+  min-height: 30px;
+  padding: 0.6cqh 1.8cqh;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ccd;
+  font: inherit;
+  font-size: clamp(11px, 2.4cqh, 15px);
+  font-weight: 700;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.weapon-bar button[aria-pressed="true"] {
+  background: #ffd166;
+  color: #0f0f1e;
+}
+
+.weapon-bar .key {
+  opacity: 0.6;
+  margin-right: 0.6cqh;
+}
+
 /* ---------------------------------------------------------------------------
    Leaderboard and the submit form
    --------------------------------------------------------------------------- */

@@ -46,4 +46,28 @@ export const CONFIG = {
 
   // Speed cap for ragdoll parts, so they don't fly through walls.
   maxSpeed: 45,
+
+  // Weapons. Level-up prices are these multiples of the weapon's buy price
+  // (buying gives level 1, so these are levels 2 to 5).
+  weaponLevelUpFactors: [0.5, 1, 1.5, 2],
+  // Each level after the first adds this much damage and knockback (+15%).
+  weaponPowerPerLevel: 0.15,
+  // Spiked walls: wall hits deal +25% at level 1, then +10% more per level.
+  spikesBaseBonus: 0.25,
+  spikesBonusPerLevel: 0.1,
+
+  // Swung (melee) weapons follow the pointer like a hand. Each physics step
+  // they cover this fraction of the gap to the pointer, up to a top speed.
+  swingFollow: 0.5,
+  maxSwingSpeed: 40,
+  // A swung weapon can land at most one scoring hit per this many milliseconds
+  // (across all body parts), so fast swipes over a lying dummy cannot farm points.
+  swingHitCooldownMs: 250,
+  fist: {
+    price: 0, // free: everyone starts with it
+    radius: 16,
+    damage: 0.6, // fraction of a thrown hit at the same speed
+    knockback: 2, // extra push on the part that was hit
+  },
+  spikesPrice: 3000,
 };
