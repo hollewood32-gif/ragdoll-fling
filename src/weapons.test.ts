@@ -6,6 +6,12 @@ import {
   blastFalloff,
   buyWeapon,
   cooldownLeft,
+  DEFAULT_ORDER,
+  keyForSlot,
+  loadOrder,
+  moveWeapon,
+  saveOrder,
+  WEAPON_ORDER_KEY,
   loadSelectedWeapon,
   launchAngle,
   loadWeapons,
@@ -103,7 +109,7 @@ describe("bat and axe", () => {
     expect(nextWeaponPrice("bat", 0)).toBe(1000);
     expect(nextWeaponPrice("axe", 0)).toBe(2000);
     expect(nextWeaponPrice("axe", 1)).toBe(1000);
-    const keys = selectableWeapons({ ...STARTING_WEAPONS, bat: 1, axe: 1, spikes: 1 }).map((w) => w.key);
+    const keys = selectableWeapons({ ...STARTING_WEAPONS, bat: 1, axe: 1, spikes: 1 }).map((_, i) => keyForSlot(i));
     expect(keys).toEqual([1, 2, 3]);
   });
 });
@@ -113,7 +119,7 @@ describe("guns", () => {
     expect(nextWeaponPrice("pistol", 0)).toBe(1500);
     expect(nextWeaponPrice("revolver", 0)).toBe(3000);
     const all = { ...STARTING_WEAPONS, bat: 1, axe: 1, pistol: 1, revolver: 1, spikes: 1 };
-    expect(selectableWeapons(all).map((w) => w.key)).toEqual([1, 2, 3, 4, 5]);
+    expect(selectableWeapons(all).map((_, i) => keyForSlot(i))).toEqual([1, 2, 3, 4, 5]);
   });
 
   it("reports how much cooldown is left", () => {
@@ -131,7 +137,7 @@ describe("explosives", () => {
     expect(nextWeaponPrice("cannon", 0)).toBe(4000);
     expect(nextWeaponPrice("rpg", 0)).toBe(7500);
     const all = Object.fromEntries(Object.keys(STARTING_WEAPONS).map((id) => [id, 1])) as typeof STARTING_WEAPONS;
-    expect(selectableWeapons(all).map((w) => w.key)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 0, null, null, null]);
+    expect(selectableWeapons(all).map((_, i) => keyForSlot(i))).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 0, null, null, null]);
   });
 
   it("blasts hit hardest at the center and fade to a quarter at the edge", () => {
@@ -168,27 +174,66 @@ describe("explosives", () => {
 });
 
 describe("katana and shotgun", () => {
-  it("cost 2,000 and 3,500; the Katana is key 0 and the Shotgun has no key", () => {
+  it("cost 2,000 and 3,500, and take the next free keys", () => {
     expect(nextWeaponPrice("katana", 0)).toBe(2000);
     expect(nextWeaponPrice("shotgun", 0)).toBe(3500);
     const owned = { ...STARTING_WEAPONS, katana: 1, shotgun: 1 };
-    expect(selectableWeapons(owned).map((w) => [w.id, w.key])).toEqual([
+    expect(selectableWeapons(owned).map((w, i) => [w.id, keyForSlot(i)])).toEqual([
       ["fist", 1],
-      ["katana", 0],
-      ["shotgun", null],
+      ["katana", 2],
+      ["shotgun", 3],
     ]);
   });
 });
 
 describe("flamethrower and boomerang", () => {
-  it("cost 6,000 and 3,000, and are picked without a number key", () => {
+  it("cost 6,000 and 3,000, and take the next free keys", () => {
     expect(nextWeaponPrice("flamethrower", 0)).toBe(6000);
     expect(nextWeaponPrice("boomerang", 0)).toBe(3000);
     const owned = { ...STARTING_WEAPONS, flamethrower: 1, boomerang: 1 };
-    expect(selectableWeapons(owned).map((w) => [w.id, w.key])).toEqual([
+    expect(selectableWeapons(owned).map((w, i) => [w.id, keyForSlot(i)])).toEqual([
       ["fist", 1],
-      ["flamethrower", null],
-      ["boomerang", null],
+      ["flamethrower", 2],
+      ["boomerang", 3],
     ]);
+  });
+});
+
+describe("weapon order (Loadout)", () => {
+  it("numbers the slots 1 to 9, then 0, then no key", () => {
+    expect([0, 8, 9, 10].map(keyForSlot)).toEqual([1, 9, 0, null]);
+  });
+
+  it("lists owned weapons in the chosen order, so keys follow it", () => {
+    const owned = { ...STARTING_WEAPONS, bat: 1, rpg: 1 };
+    const custom = ["rpg", ...DEFAULT_ORDER.filter((id) => id !== "rpg")] as typeof DEFAULT_ORDER;
+    expect(selectableWeapons(owned, custom).map((w, i) => [w.id, keyForSlot(i)])).toEqual([
+      ["rpg", 1],
+      ["fist", 2],
+      ["bat", 3],
+    ]);
+  });
+
+  it("moves a weapon one place, and ignores moves past the ends", () => {
+    expect(moveWeapon(["fist", "bat", "axe"], "axe", -1)).toEqual(["fist", "axe", "bat"]);
+    expect(moveWeapon(["fist", "bat", "axe"], "fist", -1)).toEqual(["fist", "bat", "axe"]);
+    expect(moveWeapon(["fist", "bat", "axe"], "axe", 1)).toEqual(["fist", "bat", "axe"]);
+  });
+
+  it("saves and loads the order, repairing bad saves and adding new weapons", () => {
+    const data: Record<string, string> = {};
+    const storage = { getItem: (k: string) => data[k] ?? null, setItem: (k: string, v: string) => void (data[k] = v) };
+    expect(loadOrder(storage)).toEqual(DEFAULT_ORDER);
+    const custom = moveWeapon(DEFAULT_ORDER, "bat", -1);
+    saveOrder(storage, custom);
+    expect(loadOrder(storage)).toEqual(custom);
+    // A save with junk, a repeat, and only two weapons: keep those two first, then the rest.
+    data[WEAPON_ORDER_KEY] = JSON.stringify(["rpg", "nope", "rpg", "bat"]);
+    const repaired = loadOrder(storage);
+    expect(repaired.slice(0, 2)).toEqual(["rpg", "bat"]);
+    expect(new Set(repaired)).toEqual(new Set(DEFAULT_ORDER)); // every weapon, once
+    expect(repaired).toHaveLength(DEFAULT_ORDER.length);
+    data[WEAPON_ORDER_KEY] = "not json";
+    expect(loadOrder(storage)).toEqual(DEFAULT_ORDER);
   });
 });

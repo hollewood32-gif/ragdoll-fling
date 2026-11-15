@@ -36,6 +36,11 @@ import {
   selectableWeapons,
   spikesMultiplier,
   weaponInfo,
+  keyForSlot,
+  loadOrder,
+  moveWeapon,
+  saveOrder,
+  DEFAULT_ORDER,
   cooldownLeft,
   weaponPower,
   blastFalloff,
@@ -101,6 +106,11 @@ const numbersToggle = document.getElementById("numbers-toggle")!;
 const exitSandboxButton = document.getElementById("exit-sandbox")!;
 
 const menuLeaderboardButton = document.getElementById("menu-leaderboard")!;
+const menuLoadoutButton = document.getElementById("menu-loadout")!;
+const loadoutScreen = document.getElementById("loadout")!;
+const loadoutList = document.getElementById("loadout-list")!;
+const loadoutResetButton = document.getElementById("loadout-reset")!;
+const loadoutBackButton = document.getElementById("loadout-back")!;
 const leaderboardScreen = document.getElementById("leaderboard")!;
 const boardList = document.getElementById("board-list")!;
 const boardStatus = document.getElementById("board-status")!;
@@ -170,7 +180,9 @@ let weaponUsed = false;
 // Weapons bought in the shop (level 0 = not owned) and the selected one.
 // The Upgrades On/Off switch turns weapons off too.
 let weapons: WeaponLevels = loadWeapons(storage);
-let selectedWeapon: WeaponId = loadSelectedWeapon(storage, weapons);
+// The order weapons appear on the bar and get their keys in (Loadout screen).
+let weaponOrder: WeaponId[] = loadOrder(storage);
+let selectedWeapon: WeaponId = loadSelectedWeapon(storage, weapons, weaponOrder);
 const NO_WEAPONS = Object.fromEntries(WEAPONS.map((w) => [w.id, 0])) as WeaponLevels;
 let activeWeapons: WeaponLevels = NO_WEAPONS; // what this round can use
 
@@ -1492,7 +1504,7 @@ function startFromMenu(chosen: GameMode): void {
   phase = "ready";
   exitSandboxButton.hidden = mode !== "sandbox";
   // Re-pick the saved weapon now that this round's weapons are known (Sandbox unlocks more).
-  selectedWeapon = loadSelectedWeapon(storage, activeWeapons);
+  selectedWeapon = loadSelectedWeapon(storage, activeWeapons, weaponOrder);
   renderWeaponBar();
 }
 
@@ -1637,7 +1649,10 @@ function upgradeRows(): HTMLLIElement[] {
 }
 
 function weaponRows(): HTMLLIElement[] {
-  return WEAPONS.map((weapon) => {
+  // Shop rows follow the Loadout order (passive ones last); each owned one shows its key.
+  const owned = selectableWeapons(weapons, weaponOrder);
+  const shopOrder = [...weaponOrder.map(weaponInfo), ...WEAPONS.filter((w) => w.kind === "passive")];
+  return shopOrder.map((weapon) => {
     const level = weapons[weapon.id];
     const price = nextWeaponPrice(weapon.id, level);
     const effect =
@@ -1646,7 +1661,7 @@ function weaponRows(): HTMLLIElement[] {
         : `${weapon.describe(level)} → ${weapon.describe(level + 1)}`;
     return shopRow({
       name: weapon.name,
-      key: weapon.key,
+      key: owned.includes(weapon) ? keyForSlot(owned.indexOf(weapon)) : null,
       level,
       maxLevel: MAX_WEAPON_LEVEL,
       ownable: true,
@@ -1669,7 +1684,7 @@ function weaponRows(): HTMLLIElement[] {
 // ---------------------------------------------------------------------------
 // Mouse wheel or Q / E: step to the next or previous owned weapon, wrapping around.
 function cycleWeapon(step: number): void {
-  const options = selectableWeapons(activeWeapons);
+  const options = selectableWeapons(activeWeapons, weaponOrder);
   if (options.length < 2) return;
   const index = options.findIndex((w) => w.id === selectedWeapon);
   const next = options[(index + step + options.length) % options.length];
@@ -1704,7 +1719,7 @@ const gunButtons = new Map<WeaponId, HTMLButtonElement>();
 
 // Shown during a round when weapons are on. One button per owned weapon.
 function renderWeaponBar(): void {
-  const options = selectableWeapons(activeWeapons);
+  const options = selectableWeapons(activeWeapons, weaponOrder);
   weaponBar.hidden = (phase !== "ready" && phase !== "playing") || options.length === 0;
   gunButtons.clear();
   if (!weaponBar.hidden && !options.some((w) => w.id === selectedWeapon)) selectedWeapon = options[0].id;
@@ -1713,11 +1728,11 @@ function renderWeaponBar(): void {
   if (weaponBar.hidden) return;
 
   weaponBar.replaceChildren(
-    ...options.map((weapon) => {
+    ...options.map((weapon, slot) => {
       const button = document.createElement("button");
       const key = document.createElement("span");
       key.className = "key";
-      key.textContent = weapon.key === null ? "" : String(weapon.key);
+      key.textContent = String(keyForSlot(slot) ?? ""); // keys follow the Loadout order
       button.append(key, weapon.name);
       button.setAttribute("aria-pressed", String(weapon.id === selectedWeapon));
       button.addEventListener("click", () => selectWeapon(weapon.id));
@@ -1732,6 +1747,92 @@ function updateGunCooldowns(): void {
   for (const [id, button] of gunButtons) {
     button.style.setProperty("--cooldown", String(cooldownFraction(id)));
   }
+}
+
+// ---------------------------------------------------------------------------
+// Loadout: choose the order of weapons on the bar (and so their keys)
+// ---------------------------------------------------------------------------
+function openLoadout(): void {
+  sound.unlock();
+  sound.click();
+  menuScreen.hidden = true;
+  renderLoadout();
+  loadoutScreen.hidden = false;
+  loadoutBackButton.focus();
+}
+
+function closeLoadout(): void {
+  sound.click();
+  loadoutScreen.hidden = true;
+  showMenu();
+}
+
+function moveInLoadout(id: WeaponId, step: number): void {
+  const next = moveWeapon(weaponOrder, id, step);
+  if (next === weaponOrder) return; // already at the top or bottom
+  weaponOrder = next;
+  saveOrder(storage, weaponOrder);
+  sound.click();
+  renderLoadout();
+  // Keep focus on the same button, so keyboard players can keep pressing it.
+  loadoutList.querySelector<HTMLButtonElement>(`[data-move="${id}:${step}"]`)?.focus();
+}
+
+// One row per weapon, in the current order: key (if owned), name, and up/down buttons.
+function renderLoadout(): void {
+  const owned = selectableWeapons(weapons, weaponOrder);
+  loadoutList.replaceChildren(
+    ...weaponOrder.map((id, index) => {
+      const weapon = weaponInfo(id);
+      const item = document.createElement("li");
+      item.className = "shop-item";
+      const slot = owned.indexOf(weapon);
+      if (slot < 0) item.classList.add("not-owned");
+
+      const info = document.createElement("div");
+      const keyNumber = slot >= 0 ? keyForSlot(slot) : null;
+      if (keyNumber !== null) {
+        const key = document.createElement("span");
+        key.className = "key";
+        key.textContent = String(keyNumber);
+        info.append(key);
+      }
+      const name = document.createElement("strong");
+      name.textContent = weapon.name;
+      info.append(name);
+      if (slot < 0) {
+        const note = document.createElement("span");
+        note.className = "level";
+        note.textContent = "Not owned";
+        info.append(note);
+      }
+
+      const move = document.createElement("div");
+      move.className = "move";
+      for (const [label, step, disabled] of [
+        ["▲", -1, index === 0],
+        ["▼", 1, index === weaponOrder.length - 1],
+      ] as const) {
+        const button = document.createElement("button");
+        button.textContent = label;
+        button.disabled = disabled;
+        button.dataset.move = `${id}:${step}`;
+        button.setAttribute("aria-label", `Move ${weapon.name} ${step < 0 ? "up" : "down"}`);
+        button.addEventListener("click", () => moveInLoadout(id, step));
+        move.append(button);
+      }
+
+      item.append(info, move);
+      return item;
+    }),
+  );
+}
+
+function resetLoadout(): void {
+  weaponOrder = [...DEFAULT_ORDER];
+  saveOrder(storage, weaponOrder);
+  sound.click();
+  renderLoadout();
 }
 
 function updateUpgradesToggle(): void {
@@ -1779,7 +1880,9 @@ window.addEventListener("keydown", (e) => {
   // During a round: number keys pick a weapon directly, Q and E cycle through them.
   if (phase === "ready" || phase === "playing") {
     if (/^[0-9]$/.test(e.key)) {
-      const weapon = WEAPONS.find((w) => w.key === Number(e.key));
+      // Key 1 is the first weapon in your order, 2 the second ... 0 the tenth.
+      const digit = Number(e.key);
+      const weapon = selectableWeapons(activeWeapons, weaponOrder)[digit === 0 ? 9 : digit - 1];
       if (weapon) selectWeapon(weapon.id);
     }
     if (e.key === "q" || e.key === "Q") cycleWeapon(-1);
@@ -1790,6 +1893,9 @@ updateSoundToggle();
 
 menuShopButton.addEventListener("click", () => openShop(menuScreen));
 menuLeaderboardButton.addEventListener("click", openLeaderboard);
+menuLoadoutButton.addEventListener("click", openLoadout);
+loadoutResetButton.addEventListener("click", resetLoadout);
+loadoutBackButton.addEventListener("click", closeLoadout);
 boardBackButton.addEventListener("click", () => {
   sound.click();
   leaderboardScreen.hidden = true;

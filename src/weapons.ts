@@ -29,8 +29,6 @@ export interface WeaponInfo {
   id: WeaponId;
   name: string;
   kind: WeaponKind;
-  /** Number key that selects it: 1-9, or 0 for the tenth. Null for passive weapons and those past the tenth (picked with the wheel, Q/E or the bar). */
-  key: number | null;
   /** Price to buy level 1. 0 means everyone owns it from the start. */
   price: number;
   /** What the weapon does at a given level, for the shop screen. */
@@ -41,13 +39,12 @@ export interface WeaponInfo {
 export type WeaponLevels = Record<WeaponId, number>;
 export const MAX_WEAPON_LEVEL = 1 + CONFIG.weaponLevelUpFactors.length; // 5
 
-// Listed in key order (1, 2, 3...), which is also the order of the weapon bar.
+// Listed in the default order (the Loadout screen lets the player change it).
 export const WEAPONS: WeaponInfo[] = [
   {
     id: "fist",
     name: "Fist",
     kind: "melee",
-    key: 1,
     price: CONFIG.fist.price,
     describe: (level) => `Swing to punch · ${Math.round(weaponPower(level) * 100)}% power`,
   },
@@ -55,7 +52,6 @@ export const WEAPONS: WeaponInfo[] = [
     id: "bat",
     name: "Bat",
     kind: "melee",
-    key: 2,
     price: CONFIG.bat.price,
     describe: (level) => `Long reach, huge knockback · ${Math.round(weaponPower(level) * 100)}% power`,
   },
@@ -63,7 +59,6 @@ export const WEAPONS: WeaponInfo[] = [
     id: "axe",
     name: "Axe",
     kind: "melee",
-    key: 3,
     price: CONFIG.axe.price,
     describe: (level) => `Heavy, big damage · ${Math.round(weaponPower(level) * 100)}% power`,
   },
@@ -71,7 +66,6 @@ export const WEAPONS: WeaponInfo[] = [
     id: "pistol",
     name: "Pistol",
     kind: "gun",
-    key: 4,
     price: CONFIG.pistol.price,
     describe: (level) => `Hold to fire, fast stream · ${Math.round(CONFIG.pistol.damage * weaponPower(level))} damage a bullet`,
   },
@@ -79,7 +73,6 @@ export const WEAPONS: WeaponInfo[] = [
     id: "revolver",
     name: "Revolver",
     kind: "gun",
-    key: 5,
     price: CONFIG.revolver.price,
     describe: (level) => `Hold to fire, huge kick · ${Math.round(CONFIG.revolver.damage * weaponPower(level))} damage a bullet`,
   },
@@ -87,7 +80,6 @@ export const WEAPONS: WeaponInfo[] = [
     id: "grenade",
     name: "Grenade",
     kind: "thrown",
-    key: 6,
     price: CONFIG.grenade.price,
     describe: (level) => `Hold, fling, boom after 1 s · ${Math.round(CONFIG.grenade.damage * weaponPower(level))} blast`,
   },
@@ -95,7 +87,6 @@ export const WEAPONS: WeaponInfo[] = [
     id: "cluster",
     name: "Cluster bomb",
     kind: "thrown",
-    key: 7,
     price: CONFIG.cluster.price,
     describe: (level) => `Like a grenade, plus ${CONFIG.cluster.bomblets} bomblets · ${Math.round(CONFIG.cluster.damage * weaponPower(level))} blast`,
   },
@@ -103,7 +94,6 @@ export const WEAPONS: WeaponInfo[] = [
     id: "cannon",
     name: "Cannon",
     kind: "gun",
-    key: 8,
     price: CONFIG.cannon.price,
     describe: (level) => `Hold to lob heavy cannonballs · ${Math.round(weaponPower(level) * 100)}% power`,
   },
@@ -111,7 +101,6 @@ export const WEAPONS: WeaponInfo[] = [
     id: "rpg",
     name: "RPG",
     kind: "gun",
-    key: 9,
     price: CONFIG.rpg.price,
     describe: (level) => `Hold to fire rockets · ${Math.round(CONFIG.rpg.damage * weaponPower(level))} blast`,
   },
@@ -119,7 +108,6 @@ export const WEAPONS: WeaponInfo[] = [
     id: "katana",
     name: "Katana",
     kind: "melee",
-    key: 0,
     price: CONFIG.katana.price,
     describe: (level) => `Fast light slashes · ${Math.round(weaponPower(level) * 100)}% power`,
   },
@@ -127,7 +115,6 @@ export const WEAPONS: WeaponInfo[] = [
     id: "shotgun",
     name: "Shotgun",
     kind: "gun",
-    key: null,
     price: CONFIG.shotgun.price,
     describe: (level) =>
       `Hold to fire ${CONFIG.shotgun.pellets} pellets · ${Math.round(CONFIG.shotgun.damage * weaponPower(level))} each`,
@@ -136,7 +123,6 @@ export const WEAPONS: WeaponInfo[] = [
     id: "flamethrower",
     name: "Flamethrower",
     kind: "gun",
-    key: null,
     price: CONFIG.flamethrower.price,
     describe: (level) =>
       `Hold to spray fire; parts burn · ${Math.round(CONFIG.flamethrower.burnDamage * weaponPower(level))} a tick each`,
@@ -145,16 +131,14 @@ export const WEAPONS: WeaponInfo[] = [
     id: "boomerang",
     name: "Boomerang",
     kind: "thrown",
-    key: null,
     price: CONFIG.boomerang.price,
     describe: (level) => `Fling it; it comes back · ${Math.round(CONFIG.boomerang.damage * weaponPower(level))} a hit`,
   },
-  // Passive weapons have no key and go last.
+  // Passive weapons are always on, so they never appear in the order and go last.
   {
     id: "spikes",
     name: "Spiked walls",
     kind: "passive",
-    key: null,
     price: CONFIG.spikesPrice,
     describe: (level) => `Wall hits +${Math.round((spikesMultiplier(Math.max(level, 1)) - 1) * 100)}% damage`,
   },
@@ -201,9 +185,66 @@ export function buyWeapon(
   return { levels: { ...levels, [id]: levels[id] + 1 }, coins: coins - price };
 }
 
-/** Weapons the player can select (everything owned except passive ones), in list order. */
-export function selectableWeapons(levels: WeaponLevels): WeaponInfo[] {
-  return WEAPONS.filter((w) => w.kind !== "passive" && levels[w.id] > 0);
+/**
+ * Weapons the player can select (everything owned except passive ones), in
+ * the player's chosen order (the default order if none is given).
+ */
+export function selectableWeapons(levels: WeaponLevels, order: WeaponId[] = DEFAULT_ORDER): WeaponInfo[] {
+  return order.map(weaponInfo).filter((w) => w.kind !== "passive" && levels[w.id] > 0);
+}
+
+// ---------------------------------------------------------------------------
+// Weapon order (the Loadout screen)
+// ---------------------------------------------------------------------------
+
+/** Every weapon that can be selected, in the default order. */
+export const DEFAULT_ORDER: WeaponId[] = WEAPONS.filter((w) => w.kind !== "passive").map((w) => w.id);
+
+/** The number key for a slot on the weapon bar: 1-9, then 0, then none. */
+export function keyForSlot(index: number): number | null {
+  if (index < 9) return index + 1;
+  if (index === 9) return 0;
+  return null;
+}
+
+/** Moves a weapon up (-1) or down (+1) in the order. Returns a new order. */
+export function moveWeapon(order: WeaponId[], id: WeaponId, step: number): WeaponId[] {
+  const from = order.indexOf(id);
+  const to = from + step;
+  if (from < 0 || to < 0 || to >= order.length) return order;
+  const next = [...order];
+  [next[from], next[to]] = [next[to], next[from]];
+  return next;
+}
+
+export const WEAPON_ORDER_KEY = "ragdoll-fling:weapon-order";
+
+/**
+ * Reads the saved order. Unknown or repeated ids are dropped, and weapons
+ * missing from the save (for example, ones added in a later update) are added
+ * at the end in their default order.
+ */
+export function loadOrder(storage: ScoreStorage | undefined): WeaponId[] {
+  let saved: unknown = [];
+  try {
+    saved = JSON.parse(storage?.getItem(WEAPON_ORDER_KEY) ?? "[]");
+  } catch {
+    // Broken save: fall back to the default order.
+  }
+  const order: WeaponId[] = [];
+  for (const id of Array.isArray(saved) ? saved : []) {
+    if (DEFAULT_ORDER.includes(id) && !order.includes(id)) order.push(id);
+  }
+  for (const id of DEFAULT_ORDER) if (!order.includes(id)) order.push(id);
+  return order;
+}
+
+export function saveOrder(storage: ScoreStorage | undefined, order: WeaponId[]): void {
+  try {
+    storage?.setItem(WEAPON_ORDER_KEY, JSON.stringify(order));
+  } catch {
+    // Can't remember it; it still applies for this visit.
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -241,8 +282,12 @@ export function saveWeapons(storage: ScoreStorage | undefined, levels: WeaponLev
 }
 
 /** The selected weapon, if it's still owned and selectable; otherwise the first one. */
-export function loadSelectedWeapon(storage: ScoreStorage | undefined, levels: WeaponLevels): WeaponId {
-  const options = selectableWeapons(levels);
+export function loadSelectedWeapon(
+  storage: ScoreStorage | undefined,
+  levels: WeaponLevels,
+  order: WeaponId[] = DEFAULT_ORDER,
+): WeaponId {
+  const options = selectableWeapons(levels, order);
   let saved: string | null = null;
   try {
     saved = storage?.getItem(SELECTED_WEAPON_KEY) ?? null;
