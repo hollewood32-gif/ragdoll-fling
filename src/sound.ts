@@ -118,6 +118,32 @@ export class Sound {
     smack.stop(now + 0.1);
   }
 
+  /** A gunshot: a sharp crack of noise. Heavy shots add a deep boom. */
+  shot(heavy: boolean): void {
+    const ctx = this.ready();
+    if (!ctx || !this.noise) return;
+    const now = ctx.currentTime;
+
+    const crack = ctx.createBufferSource();
+    crack.buffer = this.noise;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "highpass";
+    filter.frequency.value = heavy ? 600 : 1500;
+    crack.connect(filter).connect(this.envelope(ctx, now, heavy ? 0.6 : 0.35, heavy ? 0.12 : 0.06));
+    crack.start(now);
+    crack.stop(now + 0.15);
+
+    if (heavy) {
+      const boom = ctx.createOscillator();
+      boom.type = "sine";
+      boom.frequency.setValueAtTime(140, now);
+      boom.frequency.exponentialRampToValueAtTime(45, now + 0.2);
+      boom.connect(this.envelope(ctx, now, 0.5, 0.22));
+      boom.start(now);
+      boom.stop(now + 0.25);
+    }
+  }
+
   /** A short blip that rises in pitch as the combo grows. */
   combo(comboCount: number): void {
     this.tone(comboPitch(comboCount), 0.08, "triangle", 0.18);

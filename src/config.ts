@@ -93,5 +93,24 @@ export const CONFIG = {
     knockback: 1.5, // ...that don't push the dummy far
     cooldownMs: 600, // slow and heavy
   },
+  // Guns: a quick tap shoots whatever is under the pointer. Damage is fixed
+  // (not speed based). Knockback pushes the hit part away from the shot.
+  // A tap is a press and release within this time and distance (world pixels).
+  tapMaxMs: 250,
+  tapMaxMove: 10,
+  // How close to a body part a shot can land and still hit (aim assist).
+  gunAimRadius: { mouse: 10, touch: 30 },
+  pistol: {
+    price: 1500,
+    damage: 40, // small shots...
+    knockback: 4,
+    cooldownMs: 180, // ...fired fast
+  },
+  revolver: {
+    price: 3000,
+    damage: 130, // heavy shots...
+    knockback: 11,
+    cooldownMs: 700, // ...fired slowly
+  },
   spikesPrice: 3000,
 };

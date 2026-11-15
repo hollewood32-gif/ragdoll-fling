@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import type { ScoreStorage } from "./bestScore";
 import {
   buyWeapon,
+  cooldownLeft,
+  isTap,
   loadSelectedWeapon,
   loadWeapons,
   MAX_WEAPON_LEVEL,
@@ -24,7 +26,7 @@ function memory(initial: Record<string, string> = {}): ScoreStorage {
 
 describe("starting weapons", () => {
   it("gives everyone the Fist, and nothing else", () => {
-    expect(STARTING_WEAPONS).toEqual({ fist: 1, bat: 0, axe: 0, spikes: 0 });
+    expect(STARTING_WEAPONS).toEqual({ fist: 1, bat: 0, axe: 0, pistol: 0, revolver: 0, spikes: 0 });
   });
 });
 
@@ -70,7 +72,7 @@ describe("power", () => {
 
 describe("selecting", () => {
   it("only lists owned weapons that have a key", () => {
-    expect(selectableWeapons({ fist: 1, bat: 0, axe: 2, spikes: 3 }).map((w) => w.id)).toEqual(["fist", "axe"]);
+    expect(selectableWeapons({ ...STARTING_WEAPONS, axe: 2, spikes: 3 }).map((w) => w.id)).toEqual(["fist", "axe"]);
   });
 
   it("remembers the selected weapon and falls back to the first one", () => {
@@ -84,8 +86,8 @@ describe("selecting", () => {
 describe("saving", () => {
   it("saves and loads levels", () => {
     const storage = memory();
-    saveWeapons(storage, { fist: 3, bat: 1, axe: 0, spikes: 2 });
-    expect(loadWeapons(storage)).toEqual({ fist: 3, bat: 1, axe: 0, spikes: 2 });
+    saveWeapons(storage, { ...STARTING_WEAPONS, fist: 3, bat: 1, spikes: 2 });
+    expect(loadWeapons(storage)).toEqual({ ...STARTING_WEAPONS, fist: 3, bat: 1, spikes: 2 });
   });
 
   it("repairs broken or out-of-range saves", () => {
@@ -100,7 +102,29 @@ describe("bat and axe", () => {
     expect(nextWeaponPrice("bat", 0)).toBe(1000);
     expect(nextWeaponPrice("axe", 0)).toBe(2000);
     expect(nextWeaponPrice("axe", 1)).toBe(1000);
-    const keys = selectableWeapons({ fist: 1, bat: 1, axe: 1, spikes: 1 }).map((w) => w.key);
+    const keys = selectableWeapons({ fist: 1, bat: 1, axe: 1, pistol: 0, revolver: 0, spikes: 1 }).map((w) => w.key);
     expect(keys).toEqual([1, 2, 3]);
+  });
+});
+
+describe("guns", () => {
+  it("cost 1,500 and 3,000, and use keys 4 and 5", () => {
+    expect(nextWeaponPrice("pistol", 0)).toBe(1500);
+    expect(nextWeaponPrice("revolver", 0)).toBe(3000);
+    const all = { fist: 1, bat: 1, axe: 1, pistol: 1, revolver: 1, spikes: 1 };
+    expect(selectableWeapons(all).map((w) => w.key)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("treats a short, still press as a tap and anything else as a drag", () => {
+    expect(isTap(120, 3)).toBe(true);
+    expect(isTap(400, 3)).toBe(false); // held too long
+    expect(isTap(120, 40)).toBe(false); // moved: that's a throw
+  });
+
+  it("reports how much cooldown is left", () => {
+    expect(cooldownLeft(1000, 1000, 500)).toBe(1);
+    expect(cooldownLeft(1250, 1000, 500)).toBeCloseTo(0.5);
+    expect(cooldownLeft(2000, 1000, 500)).toBe(0);
+    expect(cooldownLeft(0, -Infinity, 500)).toBe(0);
   });
 });
