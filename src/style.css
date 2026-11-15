@@ -293,7 +293,7 @@ canvas:active {
   justify-content: center;
   gap: 1cqh;
   width: max-content;
-  max-width: 80%;
+  max-width: 62%; /* clear of the score on the left and the timer on the right */
   transform: translateX(-50%);
 }
 

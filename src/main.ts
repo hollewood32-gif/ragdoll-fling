@@ -356,10 +356,11 @@ canvas.addEventListener("pointercancel", (e) => {
 // Swung weapons: a real physics body whose hitting end follows the pointer
 // ---------------------------------------------------------------------------
 // How each swung weapon hits, from config.ts.
-const SWING_STATS: Record<"fist" | "bat" | "axe", { damage: number; knockback: number; cooldownMs: number }> = {
+const SWING_STATS: Record<"fist" | "bat" | "axe" | "katana", { damage: number; knockback: number; cooldownMs: number }> = {
   fist: { damage: CONFIG.fist.damage, knockback: CONFIG.fist.knockback, cooldownMs: CONFIG.swingHitCooldownMs },
   bat: { damage: CONFIG.bat.damage, knockback: CONFIG.bat.knockback, cooldownMs: CONFIG.bat.cooldownMs },
   axe: { damage: CONFIG.axe.damage, knockback: CONFIG.axe.knockback, cooldownMs: CONFIG.axe.cooldownMs },
+  katana: CONFIG.katana,
 };
 
 function swingStats(id: WeaponId) {
@@ -380,6 +381,17 @@ interface BuiltWeapon {
  * the hitting end, so their angle is the direction from handle to head.
  */
 function buildWeapon(id: WeaponId, at: Matter.Vector): BuiltWeapon {
+  if (id === "katana") {
+    const { length, width } = CONFIG.katana;
+    const body = Bodies.rectangle(at.x, at.y, length, width, {
+      label: "weapon",
+      density: 0.002, // light: quick to swing
+      collisionFilter: weaponFilter,
+      render: { fillStyle: "#e5e9f0" },
+    });
+    // The blade near the tip sits under the pointer; the handle trails.
+    return { body, hold: { x: length / 2 - 20, y: 0 }, handle: { x: -length / 2 + 8, y: 0 } };
+  }
   if (id === "bat") {
     const { length, width } = CONFIG.bat;
     const body = Bodies.rectangle(at.x, at.y, length, width, {
@@ -554,9 +566,10 @@ function swingHit(part: Matter.Body, weapon: HeldWeapon, normal: Matter.Vector, 
 // ---------------------------------------------------------------------------
 // Guns: hold one and it fires bullets at the dummy
 // ---------------------------------------------------------------------------
-const GUN_STATS: Record<"pistol" | "revolver", { damage: number; knockback: number; cooldownMs: number }> = {
+const GUN_STATS: Record<"pistol" | "revolver" | "shotgun", { damage: number; knockback: number; cooldownMs: number }> = {
   pistol: CONFIG.pistol,
   revolver: CONFIG.revolver,
+  shotgun: CONFIG.shotgun,
 };
 
 function gunStats(id: WeaponId) {
@@ -564,15 +577,16 @@ function gunStats(id: WeaponId) {
 }
 
 // How far each held gun kicks back when it fires (pixels).
-const RECOIL: Partial<Record<WeaponId, number>> = { pistol: 5, revolver: 12, cannon: 16, rpg: 10 };
+const RECOIL: Partial<Record<WeaponId, number>> = { pistol: 5, revolver: 12, shotgun: 14, cannon: 16, rpg: 10 };
 
 // Grip to muzzle, for drawing and firing.
-const GUN_LENGTH: Partial<Record<WeaponId, number>> = { pistol: 30, revolver: 42, cannon: 48, rpg: 60 };
+const GUN_LENGTH: Partial<Record<WeaponId, number>> = { pistol: 30, revolver: 42, shotgun: 50, cannon: 48, rpg: 60 };
 
 // Time between uses for weapons that fire or get thrown (swung weapons have none).
 const COOLDOWN_MS: Partial<Record<WeaponId, number>> = {
   pistol: CONFIG.pistol.cooldownMs,
   revolver: CONFIG.revolver.cooldownMs,
+  shotgun: CONFIG.shotgun.cooldownMs,
   cannon: CONFIG.cannon.cooldownMs,
   rpg: CONFIG.rpg.cooldownMs,
   grenade: CONFIG.grenade.cooldownMs,
@@ -610,8 +624,12 @@ interface Bullet {
   vx: number; // pixels per physics step
   vy: number;
   id: WeaponId; // which gun fired it
+  stepsLeft: number; // removed when this reaches 0 (shotgun pellets fly a short way)
+  shot: number; // which shotgun blast it came from (0 for other guns)
 }
 const bullets: Bullet[] = [];
+let shotCount = 0; // numbers each shotgun blast
+let lastComboShot = 0; // the last blast that already stepped the combo
 const MAX_BULLETS = 60;
 
 // Short-lived flashes at the muzzle.
@@ -658,8 +676,25 @@ function updateGun(): void {
     fireCannonball(muzzle, dir);
   } else if (id === "rpg") {
     rockets.push({ ...muzzle, angle: gunHeld.angle, speed: CONFIG.rpg.startSpeed });
+  } else if (id === "shotgun") {
+    // A fan of pellets, evenly spread across the cone, that fly a short way.
+    const s = CONFIG.shotgun;
+    shotCount += 1;
+    for (let p = 0; p < s.pellets && bullets.length < MAX_BULLETS; p++) {
+      const angle = gunHeld.angle + (p / (s.pellets - 1) - 0.5) * s.spread;
+      const speed = CONFIG.bulletSpeed * (0.9 + Math.random() * 0.2);
+      bullets.push({
+        ...muzzle,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        id,
+        stepsLeft: s.rangeSteps,
+        shot: shotCount,
+      });
+    }
   } else if (bullets.length < MAX_BULLETS) {
-    bullets.push({ ...muzzle, vx: dir.x * CONFIG.bulletSpeed, vy: dir.y * CONFIG.bulletSpeed, id });
+    const v = { vx: dir.x * CONFIG.bulletSpeed, vy: dir.y * CONFIG.bulletSpeed };
+    bullets.push({ ...muzzle, ...v, id, stepsLeft: Infinity, shot: 0 });
   }
   shotFlashes.push({ ...muzzle, life: 0.08, heavy });
   gunHeld.recoil = RECOIL[id] ?? 5;
@@ -688,7 +723,10 @@ function updateBullets(): void {
 
     b.x = to.x;
     b.y = to.y;
-    if (b.x < 0 || b.x > W || b.y < 0 || b.y > H) {
+    b.stepsLeft -= 1;
+    if (b.stepsLeft <= 0) {
+      bullets.splice(i, 1); // out of range: a shotgun pellet just fades
+    } else if (b.x < 0 || b.x > W || b.y < 0 || b.y > H) {
       puff({ x: Math.min(W, Math.max(0, b.x)), y: Math.min(H, Math.max(0, b.y)) }, 4); // hit a wall
       bullets.splice(i, 1);
     }
@@ -700,7 +738,12 @@ function bulletHit(part: Matter.Body, bullet: Bullet): void {
   if (!gun || phase !== "playing") return;
   const dir = Vector.normalise({ x: bullet.vx, y: bullet.vy });
   const power = weaponPower(activeWeapons[bullet.id]);
-  const landed = registerHit(part, gun.damage * power, 0, { x: bullet.x, y: bullet.y, nx: dir.x, ny: dir.y }, bullet.id);
+  // Only the first pellet of a shotgun blast to land steps the combo, like an
+  // explosion; the rest still score at the current multiplier.
+  const stepsCombo = bullet.shot === 0 || bullet.shot !== lastComboShot;
+  if (bullet.shot !== 0) lastComboShot = bullet.shot;
+  const origin = { x: bullet.x, y: bullet.y, nx: dir.x, ny: dir.y };
+  const landed = registerHit(part, gun.damage * power, 0, origin, bullet.id, stepsCombo);
   if (!landed) return;
   weaponUsed = true; // this round no longer counts for Pure best
   // Knock the part along the bullet's path, plus a little lift to keep it airborne.
@@ -996,6 +1039,7 @@ function registerHit(
   cooldownMs: number,
   origin: SparkOrigin,
   source: HitSource,
+  stepsCombo = true, // false for the extra pellets of one shotgun blast
 ): boolean {
   const now = engine.timing.timestamp;
   const last = lastHitAt.get(part) ?? -Infinity;
@@ -1008,7 +1052,8 @@ function registerHit(
   // Hits while the ragdoll is still held are worth less and don't build the combo.
   const whileHeld = grab !== null;
   // Sandbox has no combo, so its damage numbers show each hit on its own.
-  const multiplier = whileHeld || mode === "sandbox" ? 1 : combo.hit(source);
+  let multiplier = 1;
+  if (!whileHeld && mode !== "sandbox") multiplier = stepsCombo ? combo.hit(source) : combo.multiplier;
   const points = pointsForHit(damage, multiplier, whileHeld);
   score += points;
   stats.recordHit(points, multiplier);
@@ -1247,6 +1292,8 @@ function startFromMenu(chosen: GameMode): void {
   menuScreen.hidden = true;
   phase = "ready";
   exitSandboxButton.hidden = mode !== "sandbox";
+  // Re-pick the saved weapon now that this round's weapons are known (Sandbox unlocks more).
+  selectedWeapon = loadSelectedWeapon(storage, activeWeapons);
   renderWeaponBar();
 }
 
@@ -1672,7 +1719,7 @@ function draw(): void {
   ctx.lineCap = "round";
   for (const b of bullets) {
     ctx.strokeStyle = "#fff4c2";
-    ctx.lineWidth = b.id === "revolver" ? 5 : 3;
+    ctx.lineWidth = b.id === "revolver" ? 5 : b.id === "shotgun" ? 2 : 3;
     ctx.beginPath();
     ctx.moveTo(b.x - b.vx * 0.7, b.y - b.vy * 0.7);
     ctx.lineTo(b.x, b.y);
@@ -1735,9 +1782,6 @@ function drawHud(): void {
   if (mode === "sandbox") {
     // No score or timer: just say which mode this is (Exit sits top right).
     ctx.fillText("Sandbox", 28, 24);
-    ctx.font = "600 18px system-ui, sans-serif";
-    ctx.fillStyle = "rgba(255,255,255,0.6)";
-    ctx.fillText("No timer, no score · Esc to exit", 28, 60);
     drawReadyHint();
     return;
   }
@@ -1828,6 +1872,11 @@ function drawGun(gun: GunHeld): void {
     ctx.fillRect(-10, -10, length + 10, 20);
     ctx.fillStyle = "#4a4e69";
     ctx.fillRect(length - 6, -12, 8, 24);
+  } else if (gun.id === "shotgun") {
+    ctx.fillStyle = "#8d5a3b"; // wooden stock
+    ctx.fillRect(-16, -4, 22, 10);
+    ctx.fillStyle = "#4a4e69"; // dark barrel
+    ctx.fillRect(6, -6, length - 6, 8);
   } else if (gun.id === "rpg") {
     ctx.fillStyle = "#556b2f"; // a long green tube
     ctx.fillRect(-20, -7, length + 20, 14);
@@ -1926,13 +1975,26 @@ function drawHeldWeapon(weapon: HeldWeapon): void {
   const grip = Vector.add(body.position, Vector.rotate(weapon.handle, body.angle));
   const along = Vector.rotate({ x: 1, y: 0 }, body.angle);
   ctx.strokeStyle = "#3a2618";
-  ctx.lineWidth = weapon.id === "bat" ? CONFIG.bat.width : CONFIG.axe.width;
+  const gripWidth = { bat: CONFIG.bat.width, axe: CONFIG.axe.width, katana: CONFIG.katana.width + 2 };
+  ctx.lineWidth = gripWidth[weapon.id as keyof typeof gripWidth] ?? 8;
   ctx.lineCap = "round";
   ctx.beginPath();
   ctx.moveTo(grip.x - along.x * 6, grip.y - along.y * 6);
   ctx.lineTo(grip.x + along.x * 14, grip.y + along.y * 14);
   ctx.stroke();
   ctx.lineCap = "butt";
+
+  if (weapon.id === "katana") {
+    // The guard between handle and blade: a short gold bar across it.
+    const guard = Vector.add(grip, Vector.mult(along, 18));
+    const across = { x: -along.y, y: along.x };
+    ctx.strokeStyle = "#ffd166";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(guard.x - across.x * 7, guard.y - across.y * 7);
+    ctx.lineTo(guard.x + across.x * 7, guard.y + across.y * 7);
+    ctx.stroke();
+  }
 }
 
 // The Fist: a skin-colored ball with knuckle lines on the side it's moving toward.
