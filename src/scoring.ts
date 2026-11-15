@@ -67,6 +67,14 @@ export class Combo {
     return Math.min(this.cap, this.value);
   }
 
+  /**
+   * True when the combo is draining: it has weapon hits in it and the player
+   * has stayed on one weapon too long. Throws-only combos never drain.
+   */
+  get draining(): boolean {
+    return this.count > 1 && this.fading && [...this.sources].some((s) => s !== "throw");
+  }
+
   /** True when weapon hits are currently adding less than a full step. */
   get fading(): boolean {
     return fadeFactor(this.secondsOnWeapon, "weapon") < 1;
@@ -77,10 +85,13 @@ export class Combo {
     if (this.timeSinceHit > this.windowSeconds) this.breakCombo();
     this.count += 1;
     if (this.count > 1) {
-      const step = CONFIG.comboStep * fadeFactor(this.secondsOnWeapon, source);
+      // While draining nothing adds, wall hits included: only switching weapon helps.
+      const step = this.draining ? 0 : CONFIG.comboStep * fadeFactor(this.secondsOnWeapon, source);
       this.value = Math.min(CONFIG.maxVarietyMultiplier, this.value + step);
     }
     this.sources.add(source);
+    // Never bank more than the cap, so a drain shows up straight away.
+    this.value = Math.min(this.value, this.cap);
     this.timeSinceHit = 0;
     return this.multiplier;
   }
@@ -94,6 +105,7 @@ export class Combo {
   update(dtSeconds: number): void {
     this.timeSinceHit += dtSeconds;
     this.secondsOnWeapon += dtSeconds;
+    if (this.draining) this.value = Math.max(1, this.value - CONFIG.comboDrainPerSecond * dtSeconds);
     if (this.timeSinceHit > this.windowSeconds) this.breakCombo();
   }
 

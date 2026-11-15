@@ -160,12 +160,12 @@ describe("combo fade", () => {
     expect(combo.multiplier).toBe(1 + 4 * CONFIG.comboStep);
   });
 
-  it("makes weapon hits add less after 2 seconds on one weapon", () => {
+  it("stops weapon hits adding anything after 2 seconds on one weapon", () => {
     const combo = new Combo();
     combo.hit("bat"); // x1
     combo.secondsOnWeapon = 2.5; // kept the bat 2.5 s
     combo.hit("bat");
-    expect(combo.multiplier).toBe(1 + CONFIG.comboStep / 2);
+    expect(combo.multiplier).toBe(1); // draining: the hit added nothing
     expect(combo.fading).toBe(true);
   });
 
@@ -177,5 +177,41 @@ describe("combo fade", () => {
     combo.hit("pistol");
     expect(combo.multiplier).toBe(1 + CONFIG.comboStep);
     expect(combo.fading).toBe(false);
+  });
+});
+
+describe("combo drain", () => {
+  it("drains a weapon combo after 2 s without switching, and wall hits don't top it up", () => {
+    const combo = new Combo();
+    many(combo, 30, "pistol"); // quick hits: up to x5
+    combo.hit("throw"); // a wall slam: 2 kinds, cap x6
+    expect(combo.multiplier).toBeGreaterThan(4);
+    const before = combo.multiplier;
+    combo.secondsOnWeapon = 2; // stayed on the pistol too long
+    combo.update(0.5); // half a second of draining (still inside the combo window)
+    combo.hit("throw"); // a wall hit while draining adds nothing
+    expect(combo.multiplier).toBeCloseTo(before - 0.25);
+    expect(combo.draining).toBe(true);
+  });
+
+  it("stops draining once you switch weapon", () => {
+    const combo = new Combo();
+    many(combo, 10, "bat");
+    combo.secondsOnWeapon = 3;
+    combo.weaponSwitched();
+    expect(combo.draining).toBe(false);
+    const before = combo.multiplier;
+    combo.update(0.5);
+    expect(combo.multiplier).toBe(before);
+  });
+
+  it("never drains a throws-only combo (Pure rounds)", () => {
+    const combo = new Combo();
+    many(combo, 10, "throw");
+    combo.secondsOnWeapon = 10;
+    const before = combo.multiplier;
+    combo.update(0.5);
+    expect(combo.draining).toBe(false);
+    expect(combo.multiplier).toBe(before);
   });
 });
