@@ -231,11 +231,13 @@ function toWorld(e: PointerEvent): Matter.Vector {
   };
 }
 
-// A swung weapon (like the Fist) held in the player's "hand".
+// A swung weapon (Fist, Bat, Axe) held in the player's "hand".
 interface HeldWeapon {
   id: WeaponId;
   body: Matter.Body;
-  target: Matter.Vector; // where the pointer is: the weapon chases it
+  grip: Matter.Vector; // where the hand holds it, from its center (at angle 0)
+  target: Matter.Vector; // where the pointer is: the grip chases it
+  trailAngle: number; // long weapons turn toward this: behind the hand
   pointerId: number;
 }
 let held: HeldWeapon | null = null;
@@ -319,20 +321,76 @@ canvas.addEventListener("pointercancel", (e) => {
 });
 
 // ---------------------------------------------------------------------------
-// Swung weapons: a real physics body that chases the pointer
+// Swung weapons: a real physics body held by its grip
 // ---------------------------------------------------------------------------
-function pickUpWeapon(id: WeaponId, point: Matter.Vector, pointerId: number): void {
-  // Only the Fist so far; the Bat and Axe come in the next PR.
-  const body = Bodies.circle(point.x, point.y, CONFIG.fist.radius, {
+// How each swung weapon hits, from config.ts.
+const SWING_STATS: Record<"fist" | "bat" | "axe", { damage: number; knockback: number; cooldownMs: number }> = {
+  fist: { damage: CONFIG.fist.damage, knockback: CONFIG.fist.knockback, cooldownMs: CONFIG.swingHitCooldownMs },
+  bat: { damage: CONFIG.bat.damage, knockback: CONFIG.bat.knockback, cooldownMs: CONFIG.bat.cooldownMs },
+  axe: { damage: CONFIG.axe.damage, knockback: CONFIG.axe.knockback, cooldownMs: CONFIG.axe.cooldownMs },
+};
+
+function swingStats(id: WeaponId) {
+  return SWING_STATS[id as keyof typeof SWING_STATS] ?? SWING_STATS.fist;
+}
+
+const weaponFilter = { category: CATEGORY.weapon, mask: CATEGORY.ragdoll };
+
+/**
+ * Builds the weapon's body with its grip at the origin's local position.
+ * Returns the body and the grip's offset from the body's center (at angle 0).
+ * Long weapons point along +x from the grip, so their angle is the direction
+ * from the hand to the far end.
+ */
+function buildWeapon(id: WeaponId, at: Matter.Vector): { body: Matter.Body; grip: Matter.Vector } {
+  if (id === "bat") {
+    const { length, width } = CONFIG.bat;
+    const body = Bodies.rectangle(at.x, at.y, length, width, {
+      label: "weapon",
+      density: 0.004,
+      chamfer: { radius: width / 2 },
+      collisionFilter: weaponFilter,
+      render: { fillStyle: "#c68642" },
+    });
+    return { body, grip: { x: -length / 2 + 8, y: 0 } };
+  }
+  if (id === "axe") {
+    const { length, width, headWidth, headHeight } = CONFIG.axe;
+    const handle = Bodies.rectangle(at.x, at.y, length, width, {
+      label: "weapon",
+      collisionFilter: weaponFilter,
+      render: { fillStyle: "#8d5a3b" },
+    });
+    // The blade sits across the far end, sticking out to one side.
+    const head = Bodies.rectangle(at.x + length / 2 - headWidth / 2, at.y - headHeight / 4, headWidth, headHeight, {
+      label: "weapon",
+      collisionFilter: weaponFilter,
+      render: { fillStyle: "#c9d1d9" },
+    });
+    const body = Body.create({ parts: [handle, head], label: "weapon", collisionFilter: weaponFilter });
+    Body.setDensity(body, 0.006);
+    const gripWorld = { x: at.x - length / 2 + 6, y: at.y };
+    return { body, grip: Vector.sub(gripWorld, body.position) };
+  }
+  const body = Bodies.circle(at.x, at.y, CONFIG.fist.radius, {
     label: "weapon",
     density: 0.01, // heavier than the ragdoll, so punches push it around
-    frictionAir: 0,
-    restitution: 0.2,
-    collisionFilter: { category: CATEGORY.weapon, mask: CATEGORY.ragdoll },
+    collisionFilter: weaponFilter,
     render: { fillStyle: "#f4c095" },
   });
+  return { body, grip: { x: 0, y: 0 } };
+}
+
+function pickUpWeapon(id: WeaponId, point: Matter.Vector, pointerId: number): void {
+  const { body, grip } = buildWeapon(id, point);
+  body.frictionAir = 0;
+  body.restitution = 0.2;
+  // Long weapons start pointing straight up from the hand.
+  const angle = grip.x === 0 && grip.y === 0 ? 0 : -Math.PI / 2;
+  Body.setAngle(body, angle);
+  Body.setPosition(body, Vector.sub(point, Vector.rotate(grip, angle)));
   Composite.add(engine.world, body);
-  held = { id, body, target: point, pointerId };
+  held = { id, body, grip, target: point, pointerId, trailAngle: angle };
 }
 
 function putAwayWeapon(): void {
@@ -341,23 +399,50 @@ function putAwayWeapon(): void {
   held = null;
 }
 
-// Every physics step: move the weapon toward the pointer, ignoring gravity.
-// Setting its velocity (not its position) lets the physics engine see how
-// fast it's swinging, so a fast swing hits harder.
+/** Shortest signed angle from a to b, between -PI and PI. */
+function angleBetween(a: number, b: number): number {
+  return Math.atan2(Math.sin(b - a), Math.cos(b - a));
+}
+
+/** Velocity of one point on a spinning, moving body (per physics step). */
+function pointVelocity(body: Matter.Body, point: Matter.Vector): Matter.Vector {
+  const r = Vector.sub(point, body.position);
+  const w = body.angularVelocity;
+  return { x: body.velocity.x - w * r.y, y: body.velocity.y + w * r.x };
+}
+
+// Every physics step: move the grip toward the pointer, ignoring gravity.
+// Setting velocities (not positions) lets the physics engine see how fast
+// the weapon is moving, so a fast swing hits harder. Long weapons also turn
+// so the far end trails behind the hand, which whips it around on a direction
+// change.
 Events.on(engine, "beforeUpdate", () => {
   if (!held) return;
-  const { body, target } = held;
-  let velocity = Vector.mult(Vector.sub(target, body.position), CONFIG.swingFollow);
-  const speed = Vector.magnitude(velocity);
-  if (speed > CONFIG.maxSwingSpeed) velocity = Vector.mult(velocity, CONFIG.maxSwingSpeed / speed);
-  Body.setVelocity(body, velocity);
-  Body.setAngularVelocity(body, 0);
+  const { body, target, grip } = held;
+  const r = Vector.rotate(grip, body.angle); // grip, measured from the center
+  const gripWorld = Vector.add(body.position, r);
+
+  let hand = Vector.mult(Vector.sub(target, gripWorld), CONFIG.swingFollow);
+  const speed = Vector.magnitude(hand);
+  if (speed > CONFIG.maxSwingSpeed) hand = Vector.mult(hand, CONFIG.maxSwingSpeed / speed);
+
+  let spin = 0;
+  const isLong = grip.x !== 0 || grip.y !== 0;
+  if (isLong) {
+    if (speed > 2) held.trailAngle = Math.atan2(-hand.y, -hand.x); // behind the hand's motion
+    const turn = angleBetween(body.angle, held.trailAngle) * CONFIG.swingTurnRate;
+    spin = Math.max(-CONFIG.maxSwingTurn, Math.min(CONFIG.maxSwingTurn, turn));
+  }
+
+  // The center's velocity that makes the grip itself move at `hand` while spinning.
+  Body.setVelocity(body, { x: hand.x + spin * r.y, y: hand.y - spin * r.x });
+  Body.setAngularVelocity(body, spin);
   // Cancel gravity so the weapon doesn't sag below the pointer.
   body.force.y -= body.mass * engine.gravity.y * engine.gravity.scale;
 });
 
 // ---------------------------------------------------------------------------
-// Collisions: turn wall impacts into damage
+// Collisions: turn wall impacts and swings into damage
 // ---------------------------------------------------------------------------
 Events.on(engine, "collisionStart", (event) => {
   if (phase !== "playing") return;
@@ -368,10 +453,9 @@ Events.on(engine, "collisionStart", (event) => {
 
   for (const pair of event.pairs) {
     const { bodyA, bodyB } = pair;
-    const other = (body: Matter.Body) => (body === bodyA ? bodyB : bodyA);
     const part = bodyA.label === "ragdoll" ? bodyA : bodyB.label === "ragdoll" ? bodyB : null;
     if (!part) continue;
-    const hitBy = other(part);
+    const hitBy = part === bodyA ? bodyB : bodyA;
 
     if (hitBy.label === "wall" && flying) {
       // Only the speed straight INTO the wall counts, not sliding along it.
@@ -379,23 +463,28 @@ Events.on(engine, "collisionStart", (event) => {
       const damage = damageFromSpeed(impactSpeed) * spikesMultiplier(activeWeapons.spikes);
       registerHit(part, damage, CONFIG.hitCooldownMs, wallSparkOrigin(part));
     } else if (hitBy.label === "weapon" && held) {
-      swingHit(part, held, pair.collision.normal);
+      const contact = pair.collision.supports?.[0] ?? held.body.position;
+      swingHit(part, held, pair.collision.normal, { x: contact.x, y: contact.y });
     }
   }
 });
 
-// A swung weapon hit a body part: damage from how fast the swing closed in.
-function swingHit(part: Matter.Body, weapon: HeldWeapon, normal: Matter.Vector): void {
-  const relative = Vector.sub(weapon.body.velocity, part.velocity);
-  const swingSpeed = Math.abs(Vector.dot(relative, normal));
+// A swung weapon hit a body part: damage from how fast the touching point closed in.
+function swingHit(part: Matter.Body, weapon: HeldWeapon, normal: Matter.Vector, contact: Matter.Vector): void {
+  const hitStats = swingStats(weapon.id);
+  if (engine.timing.timestamp - lastSwingHitAt < hitStats.cooldownMs) return;
+
+  const weaponVelocity = pointVelocity(weapon.body, contact);
+  const relative = Vector.sub(weaponVelocity, part.velocity);
+  // Capped, so a lucky whip can't produce a silly number.
+  const swingSpeed = Math.min(CONFIG.maxSwingSpeed, Math.abs(Vector.dot(relative, normal)));
   const power = weaponPower(activeWeapons[weapon.id]);
-  const damage = damageFromSpeed(swingSpeed) * CONFIG.fist.damage * power;
-  // Sparks and knockback go the way the swing was moving.
-  const direction = Vector.normalise(weapon.body.velocity);
-  if (engine.timing.timestamp - lastSwingHitAt < CONFIG.swingHitCooldownMs) return;
+  const damage = damageFromSpeed(swingSpeed) * hitStats.damage * power;
+  // Sparks and knockback go the way the weapon was moving.
+  const direction = Vector.normalise(weaponVelocity);
   const landed = registerHit(part, damage, CONFIG.hitCooldownMs, {
-    x: weapon.body.position.x,
-    y: weapon.body.position.y,
+    x: contact.x,
+    y: contact.y,
     nx: direction.x,
     ny: direction.y,
   });
@@ -403,7 +492,7 @@ function swingHit(part: Matter.Body, weapon: HeldWeapon, normal: Matter.Vector):
   lastSwingHitAt = engine.timing.timestamp;
   weaponUsed = true; // this round no longer counts for Pure best
 
-  Body.setVelocity(part, Vector.add(part.velocity, Vector.mult(direction, CONFIG.fist.knockback * power)));
+  Body.setVelocity(part, Vector.add(part.velocity, Vector.mult(direction, hitStats.knockback * power)));
 }
 
 /** Where sparks fly from, and the direction they fly in. */
@@ -1005,7 +1094,7 @@ function draw(): void {
   }
 
   for (const part of ragdoll.parts) drawBody(part);
-  if (held) drawFist(held.body);
+  if (held) drawHeldWeapon(held);
 
   // Sparks fade out as they die
   for (const s of sparks) {
@@ -1096,6 +1185,29 @@ function drawSpikes(): void {
     ctx.lineTo(x + nx * size, y + ny * size);
     ctx.lineTo(x + ny * size * 0.6, y + nx * size * 0.6);
   }
+}
+
+// The held weapon. The Bat and Axe are drawn as their physics shapes (the
+// Axe is two shapes: handle and blade), with dark grip tape where the hand is.
+function drawHeldWeapon(weapon: HeldWeapon): void {
+  if (weapon.id === "fist") {
+    drawFist(weapon.body);
+    return;
+  }
+  const { body } = weapon;
+  const pieces = body.parts.length > 1 ? body.parts.slice(1) : [body];
+  for (const piece of pieces) drawBody(piece);
+
+  const grip = Vector.add(body.position, Vector.rotate(weapon.grip, body.angle));
+  const along = Vector.rotate({ x: 1, y: 0 }, body.angle);
+  ctx.strokeStyle = "#3a2618";
+  ctx.lineWidth = weapon.id === "bat" ? CONFIG.bat.width : CONFIG.axe.width;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(grip.x - along.x * 6, grip.y - along.y * 6);
+  ctx.lineTo(grip.x + along.x * 14, grip.y + along.y * 14);
+  ctx.stroke();
+  ctx.lineCap = "butt";
 }
 
 // The Fist: a skin-colored ball with knuckle lines on the side it's moving toward.

@@ -69,5 +69,29 @@ export const CONFIG = {
     damage: 0.6, // fraction of a thrown hit at the same speed
     knockback: 2, // extra push on the part that was hit
   },
+  // Long weapons (Bat, Axe) are held by one end. The far end trails behind
+  // the hand's motion, so changing direction whips it around. Each step the
+  // weapon turns this fraction of the way to that trailing angle, up to a cap
+  // (radians per step).
+  swingTurnRate: 0.25,
+  maxSwingTurn: 0.3,
+  bat: {
+    price: 1000,
+    length: 100,
+    width: 12,
+    damage: 0.8,
+    knockback: 7, // huge: sends the dummy flying into walls
+    cooldownMs: 400, // min time between scoring hits
+  },
+  axe: {
+    price: 2000,
+    length: 80, // handle
+    width: 8,
+    headWidth: 26, // the blade at the far end
+    headHeight: 30,
+    damage: 1.5, // big hits...
+    knockback: 1.5, // ...that don't push the dummy far
+    cooldownMs: 600, // slow and heavy
+  },
   spikesPrice: 3000,
 };
