@@ -23,6 +23,9 @@
     <main id="app">
       <canvas id="game"></canvas>
 
+      <!-- Weapon bar: tap a weapon to select it (keys 1-9 do the same). Built in code. -->
+      <div id="weapon-bar" class="weapon-bar" hidden></div>
+
       <!-- Start menu. Shown when the game loads. -->
       <div id="menu" class="overlay">
         <h1>Ragdoll Fling</h1>
@@ -32,6 +35,7 @@
           <li><strong>Let go</strong> to throw. Harder hits deal more damage</li>
           <li><strong>Throw it</strong>: slams while you're still holding on score only a quarter</li>
           <li><strong>Chain hits</strong> quickly for a combo, up to x5</li>
+          <li><strong>Press empty space</strong> to swing your weapon; 1-9 switch weapons</li>
         </ul>
         <p id="menu-best" class="best-line" hidden>
           Best: <span id="menu-best-score">0</span> · Pure best: <span id="menu-pure-best">0</span>
@@ -101,8 +105,12 @@
       <div id="shop" class="overlay" hidden>
         <h1>Shop</h1>
         <p class="coin-line">Coins: <span id="shop-coins">0</span></p>
-        <ul id="shop-list" class="shop-list"></ul>
-        <p class="shop-note">Upgrades apply from your next round. Rounds with upgrades on don't count for Pure best.</p>
+        <div class="shop-tabs" role="tablist" aria-label="Shop pages">
+          <button id="tab-upgrades" class="tab" role="tab" aria-selected="true" aria-controls="shop-list">Upgrades</button>
+          <button id="tab-weapons" class="tab" role="tab" aria-selected="false" aria-controls="shop-list">Weapons</button>
+        </div>
+        <ul id="shop-list" class="shop-list" role="tabpanel"></ul>
+        <p id="shop-note" class="shop-note"></p>
         <button id="shop-back" class="secondary">Back</button>
       </div>
     </main>
