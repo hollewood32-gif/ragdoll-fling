@@ -1692,6 +1692,7 @@ function selectWeapon(id: WeaponId): void {
   if (id !== selectedWeapon) {
     putAwayWeapon(); // let go of the old one; press again to use the new one
     sound.click();
+    combo.weaponSwitched(); // the combo fade starts over
   }
   selectedWeapon = id;
   saveSelectedWeapon(storage, id);
@@ -2004,8 +2005,16 @@ function drawHud(): void {
     ctx.fillStyle = "#06d6a0";
     // With two or more kinds of hit in the combo, show how many (they raise the cap).
     const kinds = combo.sources.size;
-    const label = kinds > 1 ? `COMBO x${combo.multiplier.toFixed(2)} · ${kinds} weapons` : `COMBO x${combo.multiplier.toFixed(2)}`;
+    let label = kinds > 1 ? `COMBO x${combo.multiplier.toFixed(2)} · ${kinds} weapons` : `COMBO x${combo.multiplier.toFixed(2)}`;
+    // Weapon hits are adding less: nudge the player to switch (turns orange).
+    const usingWeapons = [...combo.sources].some((s) => s !== "throw");
+    if (usingWeapons && combo.fading) {
+      label += " · switch!";
+      ctx.fillStyle = "#f78c6b";
+    }
+    if (label.length > 24) ctx.font = "800 22px system-ui, sans-serif"; // long labels: smaller, so they clear the score
     ctx.fillText(label, W / 2, 24);
+    ctx.font = "800 28px system-ui, sans-serif";
   }
 
   drawReadyHint();
