@@ -107,15 +107,17 @@ Original game, inspired by the *feel* of old ragdoll sandbox toys, not a copy of
 
 ### Weapons design (approved 2026-11-14)
 
-- **Controls:** drag still grabs and throws. A tap or click (press and release without moving) uses the selected weapon at that spot. Switch with keys 1-9 or by tapping the weapon bar along the bottom of the arena (phones have no number keys).
-- **Cooldowns:** each weapon has one, so click spam can't break scoring. The weapon bar shows when each is ready.
-- **Scoring:** weapon hits deal damage directly and build the combo. Their knockback sets up wall hits.
+- **Controls:** pressing on the dummy still grabs and throws it. Switch weapons with keys 1-9 or by tapping the weapon bar along the bottom of the arena (phones have no number keys).
+  - **Melee (Fist, Bat, Axe) are swung:** press on empty space and the weapon appears in your hand as a real physics object. Swing it into the dummy while holding; let go to put it away. Damage scales with swing speed times the weapon's power, so harder swings hit harder. Works the same on phones.
+  - **Guns and explosives are tapped:** a tap or click (press and release without moving) on empty space fires at that spot.
+- **Cooldowns:** each body part can only take a swing hit every so often (like `hitCooldownMs`), and each gun or explosive has a fire cooldown, so spam can't break scoring. The weapon bar shows when a weapon is ready.
+- **Scoring:** weapon hits deal damage and build the combo. Their knockback sets up wall hits.
 - **Weapons** (key, how it works, buy price):
-  1. Fist: tap the ragdoll, light punch. Free, owned from the start.
-  2. Bat: tap the ragdoll, medium damage, huge knockback. 1,000.
-  3. Axe: tap the ragdoll, big damage, little knockback. 2,000.
-  4. Pistol: tap anywhere, fast small shots. 1,500.
-  5. Revolver: tap anywhere, slow heavy shots. 3,000.
+  1. Fist: swing it, light punches. Free, owned from the start.
+  2. Bat: swing it, long reach, medium damage, huge knockback. 1,000.
+  3. Axe: swing it, heavy, big damage, little knockback. 2,000.
+  4. Pistol: tap to shoot, fast small shots. 1,500.
+  5. Revolver: tap to shoot, slow heavy shots. 3,000.
   6. Grenade: tap to throw it there, explodes after 1 s. 2,500.
   7. Cluster bomb: like the grenade, then splits into 4 smaller blasts. 5,000.
   8. Cannon: fires a heavy ball from the nearest wall toward the tap. 4,000.
