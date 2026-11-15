@@ -2,15 +2,15 @@
 // No drawing or physics here, so the rules can be unit tested.
 //
 // Weapons arrive over several PRs. Only the ones listed in WEAPONS are in the
-// shop; later PRs add the guns and explosives to this list.
+// shop; a later PR adds the explosives to this list.
 
 import type { ScoreStorage } from "./bestScore";
 import { CONFIG } from "./config";
 
-export type WeaponId = "fist" | "bat" | "axe" | "spikes";
+export type WeaponId = "fist" | "bat" | "axe" | "pistol" | "revolver" | "spikes";
 
-/** "melee" is swung, "passive" is always on once bought. Later: "tap" (guns, explosives). */
-export type WeaponKind = "melee" | "passive";
+/** "melee" is swung, "gun" fires on a tap, "passive" is always on once bought. */
+export type WeaponKind = "melee" | "gun" | "passive";
 
 export interface WeaponInfo {
   id: WeaponId;
@@ -53,6 +53,22 @@ export const WEAPONS: WeaponInfo[] = [
     key: 3,
     price: CONFIG.axe.price,
     describe: (level) => `Heavy, big damage · ${Math.round(weaponPower(level) * 100)}% power`,
+  },
+  {
+    id: "pistol",
+    name: "Pistol",
+    kind: "gun",
+    key: 4,
+    price: CONFIG.pistol.price,
+    describe: (level) => `Tap to shoot, fast · ${Math.round(CONFIG.pistol.damage * weaponPower(level))} damage`,
+  },
+  {
+    id: "revolver",
+    name: "Revolver",
+    kind: "gun",
+    key: 5,
+    price: CONFIG.revolver.price,
+    describe: (level) => `Tap to shoot, heavy · ${Math.round(CONFIG.revolver.damage * weaponPower(level))} damage`,
   },
   // Passive weapons have no key and go last.
   {
@@ -163,4 +179,19 @@ export function saveSelectedWeapon(storage: ScoreStorage | undefined, id: Weapon
   } catch {
     // Can't remember it; it still applies for this visit.
   }
+}
+
+// ---------------------------------------------------------------------------
+// Guns
+// ---------------------------------------------------------------------------
+
+/** A press counts as a tap (a gunshot) if it's short and barely moves. */
+export function isTap(durationMs: number, movedPixels: number): boolean {
+  return durationMs <= CONFIG.tapMaxMs && movedPixels <= CONFIG.tapMaxMove;
+}
+
+/** How full a weapon's cooldown is: 1 just after firing, 0 when ready. */
+export function cooldownLeft(nowMs: number, lastFiredMs: number, cooldownMs: number): number {
+  if (cooldownMs <= 0) return 0;
+  return Math.min(1, Math.max(0, 1 - (nowMs - lastFiredMs) / cooldownMs));
 }

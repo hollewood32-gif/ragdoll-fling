@@ -316,6 +316,22 @@ canvas:active {
   color: #0f0f1e;
 }
 
+/* Gun reloading: a dark fill covers the button and drains away left to right.
+   --cooldown is set from code: 1 just after a shot, 0 when ready. */
+.weapon-bar button {
+  position: relative;
+  overflow: hidden;
+}
+
+.weapon-bar button::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: calc(var(--cooldown, 0) * 100%);
+  background: rgba(15, 15, 30, 0.55);
+  pointer-events: none;
+}
+
 .weapon-bar .key {
   opacity: 0.6;
   margin-right: 0.6cqh;
