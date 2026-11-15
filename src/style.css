@@ -301,6 +301,43 @@ canvas:active {
   display: none;
 }
 
+/* Menu switches (Upgrades, Sound, Numbers): a smaller row under the main buttons */
+.overlay .buttons.toggles {
+  margin-top: 1.3cqh;
+  gap: 1.3cqh;
+}
+
+.overlay .buttons.toggles button {
+  min-height: 32px;
+  padding: 1cqh 2.7cqh;
+  font-size: clamp(11px, 2.7cqh, 16px);
+}
+
+/* Sandbox's Exit button: top right, where the timer is in a timed round */
+.exit-sandbox {
+  position: absolute;
+  top: 3cqh;
+  right: 3cqh;
+  min-height: 32px;
+  padding: 0.8cqh 2.7cqh;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font: inherit;
+  font-size: clamp(12px, 2.8cqh, 17px);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.exit-sandbox:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.exit-sandbox[hidden] {
+  display: none;
+}
+
 .weapon-bar button {
   min-height: 30px;
   padding: 0.6cqh 1.8cqh;

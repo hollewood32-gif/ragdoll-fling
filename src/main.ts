@@ -24,6 +24,7 @@ import {
   type RoundSettings,
 } from "./upgrades";
 import { RoundStats } from "./stats";
+import { loadDamageNumbers, sandboxWeapons, saveDamageNumbers, type GameMode } from "./modes";
 import {
   buyWeapon,
   loadSelectedWeapon,
@@ -95,6 +96,9 @@ const shopNote = document.getElementById("shop-note")!;
 const tabUpgrades = document.getElementById("tab-upgrades")!;
 const tabWeapons = document.getElementById("tab-weapons")!;
 const weaponBar = document.getElementById("weapon-bar")!;
+const sandboxButton = document.getElementById("sandbox")!;
+const numbersToggle = document.getElementById("numbers-toggle")!;
+const exitSandboxButton = document.getElementById("exit-sandbox")!;
 
 const menuLeaderboardButton = document.getElementById("menu-leaderboard")!;
 const leaderboardScreen = document.getElementById("leaderboard")!;
@@ -173,7 +177,9 @@ let activeWeapons: WeaponLevels = NO_WEAPONS; // what this round can use
 function applyRoundSettings(): void {
   const active = upgradesEnabled ? upgrades : NO_UPGRADES;
   settings = roundSettings(active);
-  activeWeapons = upgradesEnabled ? weapons : NO_WEAPONS;
+  // Sandbox unlocks every weapon; a timed round uses what's owned (if switched on).
+  if (mode === "sandbox") activeWeapons = sandboxWeapons(weapons);
+  else activeWeapons = upgradesEnabled ? weapons : NO_WEAPONS;
   roundStartsPure = !hasAnyUpgrade(active) && activeWeapons.spikes === 0;
   weaponUsed = false;
   combo.windowSeconds = settings.comboWindowSeconds;
@@ -181,6 +187,12 @@ function applyRoundSettings(): void {
   // ragdoll's parts have the base bounce, so raising the walls' bounce works.
   for (const wall of walls) wall.restitution = settings.wallBounce;
 }
+
+// Timed rounds or Sandbox (no timer, no score). Chosen on the menu.
+let mode: GameMode = "timed";
+
+// Floating damage numbers On/Off, remembered. Applies to every mode.
+let damageNumbers = loadDamageNumbers(storage);
 
 // Sound effects. The mute setting is remembered like the best score.
 const sound = new Sound(loadMuted(storage));
@@ -987,7 +999,8 @@ function registerHit(part: Matter.Body, rawDamage: number, cooldownMs: number, o
 
   // Hits while the ragdoll is still held are worth less and don't build the combo.
   const whileHeld = grab !== null;
-  const multiplier = whileHeld ? 1 : combo.hit();
+  // Sandbox has no combo, so its damage numbers show each hit on its own.
+  const multiplier = whileHeld || mode === "sandbox" ? 1 : combo.hit();
   const points = pointsForHit(damage, multiplier, whileHeld);
   score += points;
   stats.recordHit(points, multiplier);
@@ -995,14 +1008,16 @@ function registerHit(part: Matter.Body, rawDamage: number, cooldownMs: number, o
   sound.impact(damage);
   if (!whileHeld && combo.count > 1) sound.combo(combo.count);
 
-  floaters.push({
-    x: part.position.x,
-    y: part.position.y,
-    text: String(points),
-    size: whileHeld ? Math.min(28, 14 + points * 0.25) : Math.min(64, 18 + damage * 0.25),
-    color: whileHeld ? "#9aa0b8" : "#ffd166",
-    life: 0.9,
-  });
+  if (damageNumbers) {
+    floaters.push({
+      x: part.position.x,
+      y: part.position.y,
+      text: String(points),
+      size: whileHeld ? Math.min(28, 14 + points * 0.25) : Math.min(64, 18 + damage * 0.25),
+      color: whileHeld ? "#9aa0b8" : "#ffd166",
+      life: 0.9,
+    });
+  }
   shake = Math.max(shake, Math.min(22, 2 + damage * 0.08) * shakeScale());
   flashes.set(part, 0.12);
   spawnSparks(part, damage, whileHeld, origin);
@@ -1206,6 +1221,7 @@ async function openLeaderboard(): Promise<void> {
 function showMenu(): void {
   resetRound();
   phase = "menu";
+  exitSandboxButton.hidden = true;
   renderWeaponBar();
   menuBestScore.textContent = bestScore.toLocaleString();
   menuPureBest.textContent = formatRecord(pureBest);
@@ -1215,13 +1231,35 @@ function showMenu(): void {
   playButton.focus();
 }
 
-function startFromMenu(): void {
+function startFromMenu(chosen: GameMode): void {
   sound.unlock(); // browsers only allow sound after a click like this one
   sound.click();
-  resetRound(); // applies the Upgrades On/Off switch and any purchases
+  mode = chosen;
+  resetRound(); // applies the mode, the Upgrades On/Off switch and any purchases
   menuScreen.hidden = true;
   phase = "ready";
+  exitSandboxButton.hidden = mode !== "sandbox";
   renderWeaponBar();
+}
+
+// Leaving Sandbox: nothing is scored or saved, it just goes back to the menu.
+function exitSandbox(): void {
+  if (mode !== "sandbox" || (phase !== "ready" && phase !== "playing")) return;
+  sound.click();
+  showMenu();
+}
+
+function updateNumbersToggle(): void {
+  numbersToggle.textContent = damageNumbers ? "Numbers: On" : "Numbers: Off";
+  numbersToggle.setAttribute("aria-pressed", String(damageNumbers));
+}
+
+function toggleNumbers(): void {
+  sound.unlock();
+  sound.click();
+  damageNumbers = !damageNumbers;
+  saveDamageNumbers(storage, damageNumbers);
+  updateNumbersToggle();
 }
 
 // ---------------------------------------------------------------------------
@@ -1452,12 +1490,17 @@ toMenuButton.addEventListener("click", () => {
   sound.click();
   showMenu();
 });
-playButton.addEventListener("click", startFromMenu);
+playButton.addEventListener("click", () => startFromMenu("timed"));
+sandboxButton.addEventListener("click", () => startFromMenu("sandbox"));
+exitSandboxButton.addEventListener("click", exitSandbox);
 soundToggle.addEventListener("click", toggleMute);
+numbersToggle.addEventListener("click", toggleNumbers);
+updateNumbersToggle();
 window.addEventListener("keydown", (e) => {
   // Don't treat typing (like initials with an M in them) as a shortcut.
   if (e.target instanceof HTMLInputElement) return;
   if (e.key === "m" || e.key === "M") toggleMute();
+  if (e.key === "Escape") exitSandbox();
   // Number keys pick a weapon during a round.
   if (/^[1-9]$/.test(e.key) && (phase === "ready" || phase === "playing")) {
     const weapon = WEAPONS.find((w) => w.key === Number(e.key));
@@ -1493,7 +1536,7 @@ showMenu(); // the game opens on the start menu
 // Update: game rules that run every physics step
 // ---------------------------------------------------------------------------
 function update(dt: number): void {
-  if (phase === "playing") {
+  if (phase === "playing" && mode === "timed") {
     const secondsBefore = Math.ceil(timeLeft);
     timeLeft -= dt;
     const secondsAfter = Math.ceil(timeLeft);
@@ -1657,6 +1700,15 @@ function drawHud(): void {
   ctx.font = "800 28px system-ui, sans-serif";
 
   ctx.textAlign = "left";
+  if (mode === "sandbox") {
+    // No score or timer: just say which mode this is (Exit sits top right).
+    ctx.fillText("Sandbox", 28, 24);
+    ctx.font = "600 18px system-ui, sans-serif";
+    ctx.fillStyle = "rgba(255,255,255,0.6)";
+    ctx.fillText("No timer, no score · Esc to exit", 28, 60);
+    drawReadyHint();
+    return;
+  }
   ctx.fillText(`Damage: ${score.toLocaleString()}`, 28, 24);
   if (bestScore > 0) {
     ctx.font = "600 18px system-ui, sans-serif";
@@ -1675,6 +1727,11 @@ function drawHud(): void {
     ctx.fillText(`COMBO x${combo.multiplier.toFixed(2)}`, W / 2, 24);
   }
 
+  drawReadyHint();
+}
+
+// Before the first grab: how to play, and how to use the selected weapon.
+function drawReadyHint(): void {
   if (phase === "ready") {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
