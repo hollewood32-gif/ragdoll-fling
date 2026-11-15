@@ -26,6 +26,9 @@
       <!-- Weapon bar: tap a weapon to select it (keys 1-9 do the same). Built in code. -->
       <div id="weapon-bar" class="weapon-bar" hidden></div>
 
+      <!-- Sandbox mode has no timer, so it needs a way out (Esc does the same). -->
+      <button id="exit-sandbox" class="exit-sandbox" hidden>Exit</button>
+
       <!-- Start menu. Shown when the game loads. -->
       <div id="menu" class="overlay">
         <h1>Ragdoll Fling</h1>
@@ -43,12 +46,17 @@
         <p class="coin-line">Coins: <span id="menu-coins">0</span></p>
         <div class="buttons">
           <button id="play">Play</button>
-          <button id="sound-toggle" class="secondary" aria-pressed="true">Sound: On</button>
+          <button id="sandbox" title="No timer, no score, every weapon unlocked">Sandbox</button>
         </div>
         <div class="buttons">
           <button id="menu-shop" class="secondary">Shop</button>
           <button id="menu-leaderboard" class="secondary">Leaderboard</button>
+        </div>
+        <!-- Switches, remembered on this device -->
+        <div class="buttons toggles">
           <button id="upgrades-toggle" class="secondary" aria-pressed="true">Upgrades: On</button>
+          <button id="sound-toggle" class="secondary" aria-pressed="true">Sound: On</button>
+          <button id="numbers-toggle" class="secondary" aria-pressed="true">Numbers: On</button>
         </div>
         <p class="hint">Press M to mute or unmute any time</p>
         <p class="rotate-hint">Turn your phone sideways for a bigger arena</p>
