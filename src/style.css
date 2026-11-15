@@ -546,6 +546,31 @@ canvas:active {
   color: #778;
 }
 
+/* Drag to reorder: a mouse can grab the whole row; fingers use the grip. */
+.overlay .loadout-list .shop-item {
+  position: relative;
+  cursor: grab;
+  user-select: none;
+}
+
+.overlay .loadout-list .handle {
+  display: inline-block;
+  margin-right: 1.3cqh;
+  padding: 0 0.7cqh;
+  color: #889;
+  font-size: clamp(14px, 3.2cqh, 20px);
+  line-height: 1;
+  touch-action: none; /* dragging the grip on a phone doesn't scroll the page */
+  cursor: grab;
+}
+
+.overlay .loadout-list .shop-item.dragging {
+  z-index: 2;
+  background: #2a2a45;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  cursor: grabbing;
+}
+
 .overlay .loadout-list .move {
   display: flex;
   gap: 1cqh;

@@ -39,6 +39,7 @@ import {
   keyForSlot,
   loadOrder,
   moveWeapon,
+  moveWeaponTo,
   saveOrder,
   DEFAULT_ORDER,
   cooldownLeft,
@@ -1788,8 +1789,16 @@ function renderLoadout(): void {
       item.className = "shop-item";
       const slot = owned.indexOf(weapon);
       if (slot < 0) item.classList.add("not-owned");
+      item.dataset.id = id;
+      item.addEventListener("pointerdown", (e) => startLoadoutDrag(e, item, id));
 
       const info = document.createElement("div");
+      // A grip to drag by. Fingers must use it; a mouse can grab anywhere on the row.
+      const handle = document.createElement("span");
+      handle.className = "handle";
+      handle.textContent = "⠿";
+      handle.setAttribute("aria-hidden", "true");
+      info.append(handle);
       const keyNumber = slot >= 0 ? keyForSlot(slot) : null;
       if (keyNumber !== null) {
         const key = document.createElement("span");
@@ -1826,6 +1835,87 @@ function renderLoadout(): void {
       return item;
     }),
   );
+}
+
+// Dragging a Loadout row: it follows the pointer and the other rows make room.
+interface LoadoutDrag {
+  item: HTMLLIElement;
+  id: WeaponId;
+  pointerId: number;
+  grabOffset: number; // how far down the row the pointer grabbed it
+}
+let loadoutDrag: LoadoutDrag | null = null;
+
+function startLoadoutDrag(e: PointerEvent, item: HTMLLIElement, id: WeaponId): void {
+  if (loadoutDrag) return;
+  const target = e.target as HTMLElement;
+  if (target.closest("button")) return; // the ▲ ▼ buttons still just click
+  // Fingers drag by the grip, so swiping elsewhere still scrolls the list.
+  if (e.pointerType !== "mouse" && !target.closest(".handle")) return;
+  e.preventDefault(); // no text selection while dragging
+  try {
+    item.setPointerCapture(e.pointerId);
+  } catch {
+    // Not supported: the drag still works while the pointer stays on the row.
+  }
+  loadoutDrag = { item, id, pointerId: e.pointerId, grabOffset: e.clientY - item.getBoundingClientRect().top };
+  item.classList.add("dragging");
+  item.addEventListener("pointermove", onLoadoutDragMove);
+  item.addEventListener("pointerup", endLoadoutDrag);
+  item.addEventListener("pointercancel", endLoadoutDrag);
+}
+
+function onLoadoutDragMove(e: PointerEvent): void {
+  const drag = loadoutDrag;
+  if (!drag || e.pointerId !== drag.pointerId) return;
+  const { item } = drag;
+  const wantedTop = e.clientY - drag.grabOffset;
+
+  // Swap with neighbours until the row sits where the pointer is (a fast flick
+  // can cross several rows in one move).
+  item.style.transform = "";
+  const height = item.getBoundingClientRect().height;
+  let prev = item.previousElementSibling;
+  while (prev && wantedTop < middleOf(prev)) {
+    loadoutList.insertBefore(item, prev);
+    prev = item.previousElementSibling;
+  }
+  let next = item.nextElementSibling;
+  while (next && wantedTop + height > middleOf(next)) {
+    loadoutList.insertBefore(next, item);
+    next = item.nextElementSibling;
+  }
+
+  // Draw the row under the pointer, wherever its slot now is.
+  item.style.transform = `translateY(${wantedTop - item.getBoundingClientRect().top}px)`;
+
+  // Near the top or bottom of a screen that scrolls, scroll to reveal more rows.
+  const box = loadoutScreen.getBoundingClientRect();
+  if (e.clientY < box.top + 40) loadoutScreen.scrollTop -= 8;
+  else if (e.clientY > box.bottom - 40) loadoutScreen.scrollTop += 8;
+}
+
+function middleOf(el: Element): number {
+  const r = el.getBoundingClientRect();
+  return r.top + r.height / 2;
+}
+
+// Letting go: save the row's new position and redraw (keys may have changed).
+function endLoadoutDrag(e: PointerEvent): void {
+  const drag = loadoutDrag;
+  if (!drag || e.pointerId !== drag.pointerId) return;
+  const { item, id } = drag;
+  loadoutDrag = null;
+  item.removeEventListener("pointermove", onLoadoutDragMove);
+  item.removeEventListener("pointerup", endLoadoutDrag);
+  item.removeEventListener("pointercancel", endLoadoutDrag);
+  const next = moveWeaponTo(weaponOrder, id, [...loadoutList.children].indexOf(item));
+  if (next !== weaponOrder) {
+    weaponOrder = next;
+    saveOrder(storage, weaponOrder);
+    sound.click();
+  }
+  renderLoadout();
 }
 
 function resetLoadout(): void {

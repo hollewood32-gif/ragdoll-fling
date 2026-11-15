@@ -216,6 +216,17 @@ export function moveWeapon(order: WeaponId[], id: WeaponId, step: number): Weapo
   [next[from], next[to]] = [next[to], next[from]];
   return next;
 }
+/** Moves a weapon to a position in the order (a drag and drop). Returns a new order. */
+export function moveWeaponTo(order: WeaponId[], id: WeaponId, toIndex: number): WeaponId[] {
+  const from = order.indexOf(id);
+  if (from < 0) return order;
+  const to = Math.max(0, Math.min(order.length - 1, Math.round(toIndex)));
+  if (to === from) return order;
+  const next = order.filter((w) => w !== id);
+  next.splice(to, 0, id);
+  return next;
+}
+
 
 export const WEAPON_ORDER_KEY = "ragdoll-fling:weapon-order";
 

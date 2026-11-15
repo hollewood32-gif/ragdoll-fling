@@ -10,6 +10,7 @@ import {
   keyForSlot,
   loadOrder,
   moveWeapon,
+  moveWeaponTo,
   saveOrder,
   WEAPON_ORDER_KEY,
   loadSelectedWeapon,
@@ -235,5 +236,20 @@ describe("weapon order (Loadout)", () => {
     expect(repaired).toHaveLength(DEFAULT_ORDER.length);
     data[WEAPON_ORDER_KEY] = "not json";
     expect(loadOrder(storage)).toEqual(DEFAULT_ORDER);
+  });
+});
+
+describe("drag to reorder", () => {
+  it("drops a weapon at a new position, shifting the others", () => {
+    const order = ["fist", "bat", "axe", "pistol"] as typeof DEFAULT_ORDER;
+    expect(moveWeaponTo(order, "pistol", 0)).toEqual(["pistol", "fist", "bat", "axe"]);
+    expect(moveWeaponTo(order, "fist", 2)).toEqual(["bat", "axe", "fist", "pistol"]);
+  });
+
+  it("ignores a drop in the same place, and keeps drops inside the list", () => {
+    const order = ["fist", "bat", "axe"] as typeof DEFAULT_ORDER;
+    expect(moveWeaponTo(order, "bat", 1)).toBe(order);
+    expect(moveWeaponTo(order, "fist", 99)).toEqual(["bat", "axe", "fist"]);
+    expect(moveWeaponTo(order, "axe", -5)).toEqual(["axe", "fist", "bat"]);
   });
 });
