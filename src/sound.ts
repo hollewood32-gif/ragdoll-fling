@@ -144,6 +144,22 @@ export class Sound {
     }
   }
 
+  /** A flamethrower's roar: a soft burst of filtered noise, repeated while firing. */
+  flame(): void {
+    const ctx = this.ready();
+    if (!ctx || !this.noise) return;
+    const now = ctx.currentTime;
+    const roar = ctx.createBufferSource();
+    roar.buffer = this.noise;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.value = 700;
+    filter.Q.value = 0.7;
+    roar.connect(filter).connect(this.envelope(ctx, now, 0.18, 0.2));
+    roar.start(now);
+    roar.stop(now + 0.25);
+  }
+
   /** An explosion: a long rumble of muffled noise over a deep falling boom. */
   explosion(big: boolean): void {
     const ctx = this.ready();
