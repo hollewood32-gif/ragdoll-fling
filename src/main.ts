@@ -36,7 +36,6 @@ import {
   spikesMultiplier,
   weaponInfo,
   cooldownLeft,
-  isTap,
   weaponPower,
   WEAPONS,
   type WeaponId,
@@ -51,7 +50,7 @@ import {
   submitScore,
 } from "./leaderboard";
 
-const { Engine, Composite, Bodies, Body, Constraint, Events, Vector } = Matter;
+const { Engine, Composite, Bodies, Body, Constraint, Events, Query, Vector } = Matter;
 const W = CONFIG.width;
 const H = CONFIG.height;
 
@@ -263,30 +262,29 @@ function startClock(): void {
 
 canvas.addEventListener("pointerdown", (e) => {
   if (phase === "menu" || phase === "results") return;
-  if (grab || held) return; // already holding something: ignore a second finger
+  if (grab || held || gunHeld) return; // already holding something: ignore a second finger
 
   // Fingers are less precise than a mouse, so touches get a bigger grab radius.
   const point = toWorld(e);
   const radius = e.pointerType === "mouse" ? GRAB_RADIUS.mouse : GRAB_RADIUS.touch;
   const target = pickPart(ragdoll.parts, point, radius);
-  const kind = activeWeapons[selectedWeapon] > 0 ? weaponInfo(selectedWeapon).kind : null;
   if (!target) {
-    // Pressed empty space: pick up the selected swung weapon, or fire the gun.
+    // Pressed empty space: pick up the selected weapon (swung or gun).
+    const kind = activeWeapons[selectedWeapon] > 0 ? weaponInfo(selectedWeapon).kind : null;
     if (kind === "melee") {
       capturePointer(e);
       pickUpWeapon(selectedWeapon, point, e.pointerId);
       startClock();
     } else if (kind === "gun") {
-      fireGun(selectedWeapon, point, e.pointerType);
+      capturePointer(e);
+      gunHeld = { id: selectedWeapon, pointerId: e.pointerId, at: point, angle: aimAt(point), recoil: 0 };
+      startClock();
     }
     return;
   }
 
   capturePointer(e);
   grabPointerId = e.pointerId;
-  // With a gun out, a quick tap on the dummy is a shot, not a throw. We can't
-  // tell yet, so grab it now and decide when the pointer lifts.
-  pendingTap = kind === "gun" ? { pointerId: e.pointerId, startMs: performance.now(), point, pointerType: e.pointerType } : null;
 
   // A springy rope from the pointer to the grabbed spot.
   grab = Constraint.create({
@@ -301,17 +299,16 @@ canvas.addEventListener("pointerdown", (e) => {
   startClock();
 });
 
-// A press on the dummy while a gun is selected: a shot if it turns out to be a tap.
-let pendingTap: { pointerId: number; startMs: number; point: Matter.Vector; pointerType: string } | null = null;
-
 canvas.addEventListener("pointermove", (e) => {
   if (grab && e.pointerId === grabPointerId) grab.pointA = toWorld(e);
   if (held && e.pointerId === held.pointerId) held.target = toWorld(e);
+  if (gunHeld && e.pointerId === gunHeld.pointerId) gunHeld.at = toWorld(e);
 });
 
 function release(): void {
   grabPointerId = null;
   putAwayWeapon();
+  gunHeld = null;
   if (!grab) return;
   Composite.remove(engine.world, grab);
   grab = null; // the ragdoll keeps its speed, which is the "fling"
@@ -323,25 +320,19 @@ function onPointerUp(e: PointerEvent): void {
     putAwayWeapon();
     return;
   }
-  if (e.pointerId !== grabPointerId) return; // a different finger lifted
-
-  const tap = pendingTap;
-  pendingTap = null;
-  if (tap && tap.pointerId === e.pointerId) {
-    const moved = Vector.magnitude(Vector.sub(toWorld(e), tap.point));
-    if (isTap(performance.now() - tap.startMs, moved)) {
-      release(); // let go without counting a throw...
-      fireGun(selectedWeapon, tap.point, tap.pointerType); // ...and shoot instead
-      return;
-    }
+  if (gunHeld && e.pointerId === gunHeld.pointerId) {
+    gunHeld = null; // stop firing and put the gun away
+    return;
   }
-
+  if (e.pointerId !== grabPointerId) return; // a different finger lifted
   if (grab && phase === "playing") stats.recordThrow();
   release();
 }
 canvas.addEventListener("pointerup", onPointerUp);
 canvas.addEventListener("pointercancel", (e) => {
-  if (e.pointerId === grabPointerId || e.pointerId === held?.pointerId) release();
+  if (e.pointerId === grabPointerId || e.pointerId === held?.pointerId || e.pointerId === gunHeld?.pointerId) {
+    release();
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -531,7 +522,7 @@ function swingHit(part: Matter.Body, weapon: HeldWeapon, normal: Matter.Vector, 
 }
 
 // ---------------------------------------------------------------------------
-// Guns: a tap shoots whatever is under the pointer
+// Guns: hold one and it fires bullets at the dummy
 // ---------------------------------------------------------------------------
 const GUN_STATS: Record<"pistol" | "revolver", { damage: number; knockback: number; cooldownMs: number }> = {
   pistol: CONFIG.pistol,
@@ -542,9 +533,34 @@ function gunStats(id: WeaponId) {
   return GUN_STATS[id as keyof typeof GUN_STATS] ?? null;
 }
 
+const GUN_LENGTH = { pistol: 30, revolver: 42 }; // grip to muzzle, for drawing and firing
+
 const lastShotAt = new Map<WeaponId, number>(); // gun -> game time of its last shot (ms)
 
-// Short-lived flashes where shots land.
+// The gun in the player's hand.
+interface GunHeld {
+  id: WeaponId;
+  pointerId: number;
+  at: Matter.Vector; // the hand: where the pointer is
+  angle: number; // where it's aimed (always at the dummy)
+  recoil: number; // pixels the gun is kicked back after a shot
+}
+let gunHeld: GunHeld | null = null;
+
+// Bullets in flight. They aren't physics bodies: each step they move in a
+// straight line and check that whole segment for a hit, so a fast bullet
+// can't skip through a thin arm between steps.
+interface Bullet {
+  x: number;
+  y: number;
+  vx: number; // pixels per physics step
+  vy: number;
+  id: WeaponId; // which gun fired it
+}
+const bullets: Bullet[] = [];
+const MAX_BULLETS = 60;
+
+// Short-lived flashes at the muzzle.
 interface ShotFlash {
   x: number;
   y: number;
@@ -553,43 +569,92 @@ interface ShotFlash {
 }
 const shotFlashes: ShotFlash[] = [];
 
-function fireGun(id: WeaponId, point: Matter.Vector, pointerType: string): void {
-  const gun = gunStats(id);
-  if (!gun || phase === "menu" || phase === "results") return;
-  const now = engine.timing.timestamp;
-  if (cooldownLeft(now, lastShotAt.get(id) ?? -Infinity, gun.cooldownMs) > 0) return; // still reloading
-  lastShotAt.set(id, now);
-  startClock();
-
-  const heavy = id === "revolver";
-  sound.shot(heavy);
-  shotFlashes.push({ x: point.x, y: point.y, life: 0.15, heavy });
-  shake = Math.max(shake, (heavy ? 5 : 2) * shakeScale());
-
-  const radius = pointerType === "mouse" ? CONFIG.gunAimRadius.mouse : CONFIG.gunAimRadius.touch;
-  const target = pickPart(ragdoll.parts, point, radius);
-  if (!target) {
-    puff(point, 5); // a miss: a little dust where it landed
-    return;
+/** The dummy's center of mass: what the gun aims at. */
+function dummyCenter(): Matter.Vector {
+  let mass = 0;
+  let x = 0;
+  let y = 0;
+  for (const part of ragdoll.parts) {
+    mass += part.mass;
+    x += part.mass * part.position.x;
+    y += part.mass * part.position.y;
   }
-
-  // Push the part away from where the shot landed (or upward on a dead-center hit).
-  const away = Vector.sub(target.body.position, point);
-  const direction = Vector.magnitude(away) > 1 ? Vector.normalise(away) : { x: 0, y: -1 };
-  const power = weaponPower(activeWeapons[id]);
-  const landed = registerHit(target.body, gun.damage * power, 0, {
-    x: point.x,
-    y: point.y,
-    nx: direction.x,
-    ny: direction.y,
-  });
-  if (!landed) return;
-  weaponUsed = true; // this round no longer counts for Pure best
-  const kick = Vector.add(Vector.mult(direction, gun.knockback * power), { x: 0, y: -1 });
-  Body.setVelocity(target.body, Vector.add(target.body.velocity, kick));
+  return { x: x / mass, y: y / mass };
 }
 
-// Grey dust for a missed shot.
+function aimAt(from: Matter.Vector): number {
+  const center = dummyCenter();
+  return Math.atan2(center.y - from.y, center.x - from.x);
+}
+
+// Every physics step while a gun is held: aim at the dummy and fire when reloaded.
+function updateGun(): void {
+  if (!gunHeld) return;
+  gunHeld.angle = aimAt(gunHeld.at);
+  gunHeld.recoil *= 0.8;
+  if (phase !== "playing") return;
+
+  const gun = gunStats(gunHeld.id);
+  if (!gun) return;
+  const now = engine.timing.timestamp;
+  if (cooldownLeft(now, lastShotAt.get(gunHeld.id) ?? -Infinity, gun.cooldownMs) > 0) return;
+  lastShotAt.set(gunHeld.id, now);
+
+  const heavy = gunHeld.id === "revolver";
+  const dir = { x: Math.cos(gunHeld.angle), y: Math.sin(gunHeld.angle) };
+  const length = heavy ? GUN_LENGTH.revolver : GUN_LENGTH.pistol;
+  const muzzle = Vector.add(gunHeld.at, Vector.mult(dir, length));
+  if (bullets.length < MAX_BULLETS) {
+    bullets.push({ ...muzzle, vx: dir.x * CONFIG.bulletSpeed, vy: dir.y * CONFIG.bulletSpeed, id: gunHeld.id });
+  }
+  shotFlashes.push({ ...muzzle, life: 0.08, heavy });
+  gunHeld.recoil = heavy ? 12 : 5;
+  shake = Math.max(shake, (heavy ? 5 : 1.5) * shakeScale());
+  sound.shot(heavy);
+}
+
+// Every physics step: move bullets, and score the first body part each one crosses.
+function updateBullets(): void {
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    const b = bullets[i];
+    const from = { x: b.x, y: b.y };
+    const to = { x: b.x + b.vx, y: b.y + b.vy };
+
+    const crossed = Query.ray(ragdoll.parts, from, to, 6)
+      .map((c) => ragdoll.parts.find((p) => p === c.bodyA || p === c.bodyB))
+      .filter((p): p is Matter.Body => p !== undefined);
+    if (crossed.length > 0) {
+      // The part nearest the bullet's start is the one it reached first.
+      const distance = (p: Matter.Body) => Vector.magnitude(Vector.sub(p.position, from));
+      const part = crossed.reduce((a, c) => (distance(c) < distance(a) ? c : a));
+      bulletHit(part, b);
+      bullets.splice(i, 1);
+      continue;
+    }
+
+    b.x = to.x;
+    b.y = to.y;
+    if (b.x < 0 || b.x > W || b.y < 0 || b.y > H) {
+      puff({ x: Math.min(W, Math.max(0, b.x)), y: Math.min(H, Math.max(0, b.y)) }, 4); // hit a wall
+      bullets.splice(i, 1);
+    }
+  }
+}
+
+function bulletHit(part: Matter.Body, bullet: Bullet): void {
+  const gun = gunStats(bullet.id);
+  if (!gun || phase !== "playing") return;
+  const dir = Vector.normalise({ x: bullet.vx, y: bullet.vy });
+  const power = weaponPower(activeWeapons[bullet.id]);
+  const landed = registerHit(part, gun.damage * power, 0, { x: bullet.x, y: bullet.y, nx: dir.x, ny: dir.y });
+  if (!landed) return;
+  weaponUsed = true; // this round no longer counts for Pure best
+  // Knock the part along the bullet's path, plus a little lift to keep it airborne.
+  const kick = Vector.add(Vector.mult(dir, gun.knockback * power), { x: 0, y: -1.5 });
+  Body.setVelocity(part, Vector.add(part.velocity, kick));
+}
+
+// Grey dust where a bullet hits a wall.
 function puff(at: Matter.Vector, count: number): void {
   for (let i = 0; i < count && sparks.length < MAX_SPARKS; i++) {
     const angle = Math.random() * Math.PI * 2;
@@ -764,7 +829,7 @@ function resetRound(): void {
   lastSwingHitAt = -Infinity;
   lastShotAt.clear();
   shotFlashes.length = 0;
-  pendingTap = null;
+  bullets.length = 0;
   shake = 0;
   resultsScreen.hidden = true;
 }
@@ -1171,6 +1236,8 @@ function update(dt: number): void {
     shotFlashes[i].life -= dt;
     if (shotFlashes[i].life <= 0) shotFlashes.splice(i, 1);
   }
+  updateGun();
+  updateBullets();
   updateGunCooldowns();
 
   shake *= 0.88; // fade the shake out quickly
@@ -1235,6 +1302,20 @@ function draw(): void {
   for (const part of ragdoll.parts) drawBody(part);
   if (held) drawHeldWeapon(held);
 
+  // Bullets: bright streaks pointing back along their path
+  ctx.lineCap = "round";
+  for (const b of bullets) {
+    ctx.strokeStyle = "#fff4c2";
+    ctx.lineWidth = b.id === "revolver" ? 5 : 3;
+    ctx.beginPath();
+    ctx.moveTo(b.x - b.vx * 0.7, b.y - b.vy * 0.7);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+  }
+  ctx.lineCap = "butt";
+
+  if (gunHeld) drawGun(gunHeld);
+
   // Sparks fade out as they die
   for (const s of sparks) {
     ctx.globalAlpha = s.life / s.maxLife;
@@ -1243,20 +1324,18 @@ function draw(): void {
   }
   ctx.globalAlpha = 1;
 
-  // Shot flashes: a bright dot and a ring that grows as it fades
+  // Muzzle flashes: a bright burst that shrinks and fades
   for (const f of shotFlashes) {
-    const age = 1 - f.life / 0.15; // 0 when fired, 1 when gone
-    const size = f.heavy ? 22 : 14;
-    ctx.globalAlpha = 1 - age;
-    ctx.fillStyle = "#fff4c2";
+    const left = f.life / 0.08; // 1 when fired, 0 when gone
+    ctx.globalAlpha = left;
+    ctx.fillStyle = "#ffd166";
     ctx.beginPath();
-    ctx.arc(f.x, f.y, size * 0.35 * (1 - age), 0, Math.PI * 2);
+    ctx.arc(f.x, f.y, (f.heavy ? 16 : 10) * left, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = "#ffd166";
-    ctx.lineWidth = f.heavy ? 3 : 2;
+    ctx.fillStyle = "#ffffff";
     ctx.beginPath();
-    ctx.arc(f.x, f.y, size * (0.4 + age), 0, Math.PI * 2);
-    ctx.stroke();
+    ctx.arc(f.x, f.y, (f.heavy ? 8 : 5) * left, 0, Math.PI * 2);
+    ctx.fill();
   }
   ctx.globalAlpha = 1;
 
@@ -1316,7 +1395,7 @@ function drawHud(): void {
       const weapon = weaponInfo(selectedWeapon);
       const hint =
         weapon.kind === "gun"
-          ? `Or tap to shoot with your ${weapon.name}`
+          ? `Or hold empty space to fire your ${weapon.name}`
           : `Or press empty space to swing your ${weapon.name}`;
       ctx.fillText(hint, W / 2, H * 0.2 + 34);
     }
@@ -1350,6 +1429,33 @@ function drawSpikes(): void {
 
 // The held weapon. The Bat and Axe are drawn as their physics shapes (the
 // Axe is two shapes: handle and blade), with dark grip tape on the handle.
+// The held gun, drawn at the hand and turned toward the dummy. It flips when
+// aiming left so the grip always hangs down, and slides back on recoil.
+function drawGun(gun: GunHeld): void {
+  const heavy = gun.id === "revolver";
+  const length = heavy ? GUN_LENGTH.revolver : GUN_LENGTH.pistol;
+  ctx.save();
+  ctx.translate(gun.at.x, gun.at.y);
+  ctx.rotate(gun.angle);
+  if (Math.cos(gun.angle) < 0) ctx.scale(1, -1);
+  ctx.translate(-gun.recoil, 0);
+
+  ctx.fillStyle = "#4a4e69"; // grip
+  ctx.save();
+  ctx.rotate(0.35);
+  ctx.fillRect(-4, 0, 9, 16);
+  ctx.restore();
+  ctx.fillStyle = "#9aa0b8"; // body and barrel
+  ctx.fillRect(-6, -6, length + 6, heavy ? 8 : 7);
+  if (heavy) {
+    ctx.fillStyle = "#6c7086"; // the revolver's cylinder
+    ctx.beginPath();
+    ctx.arc(6, -2, 7, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 function drawHeldWeapon(weapon: HeldWeapon): void {
   if (weapon.id === "fist") {
     drawFist(weapon.body);

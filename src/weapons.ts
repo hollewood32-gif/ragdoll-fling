@@ -60,7 +60,7 @@ export const WEAPONS: WeaponInfo[] = [
     kind: "gun",
     key: 4,
     price: CONFIG.pistol.price,
-    describe: (level) => `Tap to shoot, fast · ${Math.round(CONFIG.pistol.damage * weaponPower(level))} damage`,
+    describe: (level) => `Hold to fire, fast stream · ${Math.round(CONFIG.pistol.damage * weaponPower(level))} damage a bullet`,
   },
   {
     id: "revolver",
@@ -68,7 +68,7 @@ export const WEAPONS: WeaponInfo[] = [
     kind: "gun",
     key: 5,
     price: CONFIG.revolver.price,
-    describe: (level) => `Tap to shoot, heavy · ${Math.round(CONFIG.revolver.damage * weaponPower(level))} damage`,
+    describe: (level) => `Hold to fire, huge kick · ${Math.round(CONFIG.revolver.damage * weaponPower(level))} damage a bullet`,
   },
   // Passive weapons have no key and go last.
   {
@@ -184,11 +184,6 @@ export function saveSelectedWeapon(storage: ScoreStorage | undefined, id: Weapon
 // ---------------------------------------------------------------------------
 // Guns
 // ---------------------------------------------------------------------------
-
-/** A press counts as a tap (a gunshot) if it's short and barely moves. */
-export function isTap(durationMs: number, movedPixels: number): boolean {
-  return durationMs <= CONFIG.tapMaxMs && movedPixels <= CONFIG.tapMaxMove;
-}
 
 /** How full a weapon's cooldown is: 1 just after firing, 0 when ready. */
 export function cooldownLeft(nowMs: number, lastFiredMs: number, cooldownMs: number): number {
