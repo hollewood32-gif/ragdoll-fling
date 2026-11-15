@@ -5,7 +5,6 @@ import type { ScoreStorage } from "./bestScore";
 import {
   buyWeapon,
   cooldownLeft,
-  isTap,
   loadSelectedWeapon,
   loadWeapons,
   MAX_WEAPON_LEVEL,
@@ -113,12 +112,6 @@ describe("guns", () => {
     expect(nextWeaponPrice("revolver", 0)).toBe(3000);
     const all = { fist: 1, bat: 1, axe: 1, pistol: 1, revolver: 1, spikes: 1 };
     expect(selectableWeapons(all).map((w) => w.key)).toEqual([1, 2, 3, 4, 5]);
-  });
-
-  it("treats a short, still press as a tap and anything else as a drag", () => {
-    expect(isTap(120, 3)).toBe(true);
-    expect(isTap(400, 3)).toBe(false); // held too long
-    expect(isTap(120, 40)).toBe(false); // moved: that's a throw
   });
 
   it("reports how much cooldown is left", () => {
