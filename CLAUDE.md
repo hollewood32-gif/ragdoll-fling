@@ -130,6 +130,23 @@ Original game, inspired by the *feel* of old ragdoll sandbox toys, not a copy of
 - **Art and sound:** shapes and sounds made in code, like the rest of the game.
 - All numbers (damage, knockback, cooldowns, prices) live in `config.ts` and get tuned after playtesting.
 
+10. [ ] More weapons and the variety combo. In progress, as four PRs:
+   - [x] PR: save the design below.
+   - [ ] PR: variety combo, plus switching with the mouse wheel, Q/E and key 0.
+   - [ ] PR: Katana and Shotgun.
+   - [ ] PR: Flamethrower and Boomerang.
+
+### Variety combo and more weapons design (approved 2026-11-15)
+
+- **Variety combo:** each different weapon type that lands a hit during the current combo raises the combo cap by x1. Throwing counts as one type (thrown hits and every wall hit). Throws only: x5 (unchanged, so Pure rounds and the leaderboard are unaffected). Two types: x6. Up to x10 with six or more. The step per hit stays +0.25. When the combo breaks, the set of types resets. The HUD shows the count, e.g. "COMBO x6.25 · 3 weapons".
+- **Switching:** mouse wheel or Q / E cycles through owned weapons; keys 1-9 and 0 pick directly; the weapon bar still works for taps on phones. Weapons past the tenth have no number key.
+- **New weapons** (how it works, buy price):
+  - **Katana** (key 0): swung like the Bat but light and fast; short cooldown so quick slashes chain hits; small knockback. 2,000.
+  - **Shotgun**: held gun; each shot is 6 pellets in a spread with a big close-range kick; slow reload. 3,500.
+  - **Flamethrower**: held; sprays a short cone of fire. Parts it touches catch fire and take damage over time; each burn tick is a hit. 6,000.
+  - **Boomerang**: thrown like a grenade; it curves back toward the hand and can hit on the way out and on the way back. 3,000.
+- Same rules as the other weapons: +15% per level, level-up prices 0.5x to 2x the buy price, disabled by Upgrades Off, unlocked in Sandbox, all numbers in `config.ts`.
+
 ### Game modes and display settings (added 2026-11-15, PR #29)
 
 - **Timed** (the Play button): the normal game. Scored, earns coins, records Best / Pure best.
