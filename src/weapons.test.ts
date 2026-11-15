@@ -131,7 +131,7 @@ describe("explosives", () => {
     expect(nextWeaponPrice("cannon", 0)).toBe(4000);
     expect(nextWeaponPrice("rpg", 0)).toBe(7500);
     const all = Object.fromEntries(Object.keys(STARTING_WEAPONS).map((id) => [id, 1])) as typeof STARTING_WEAPONS;
-    expect(selectableWeapons(all).map((w) => w.key)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(selectableWeapons(all).map((w) => w.key)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 0, null]);
   });
 
   it("blasts hit hardest at the center and fade to a quarter at the edge", () => {
@@ -164,5 +164,18 @@ describe("explosives", () => {
 
   it("says when a target is out of range", () => {
     expect(launchAngle(5000, 0, 10, 0.3)).toBeNull();
+  });
+});
+
+describe("katana and shotgun", () => {
+  it("cost 2,000 and 3,500; the Katana is key 0 and the Shotgun has no key", () => {
+    expect(nextWeaponPrice("katana", 0)).toBe(2000);
+    expect(nextWeaponPrice("shotgun", 0)).toBe(3500);
+    const owned = { ...STARTING_WEAPONS, katana: 1, shotgun: 1 };
+    expect(selectableWeapons(owned).map((w) => [w.id, w.key])).toEqual([
+      ["fist", 1],
+      ["katana", 0],
+      ["shotgun", null],
+    ]);
   });
 });

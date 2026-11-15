@@ -16,6 +16,8 @@ export type WeaponId =
   | "cluster"
   | "cannon"
   | "rpg"
+  | "katana"
+  | "shotgun"
   | "spikes";
 
 /** "melee" is swung, "thrown" is flung by hand, "gun" fires while held, "passive" is always on once bought. */
@@ -110,6 +112,23 @@ export const WEAPONS: WeaponInfo[] = [
     key: 9,
     price: CONFIG.rpg.price,
     describe: (level) => `Hold to fire rockets · ${Math.round(CONFIG.rpg.damage * weaponPower(level))} blast`,
+  },
+  {
+    id: "katana",
+    name: "Katana",
+    kind: "melee",
+    key: 0,
+    price: CONFIG.katana.price,
+    describe: (level) => `Fast light slashes · ${Math.round(weaponPower(level) * 100)}% power`,
+  },
+  {
+    id: "shotgun",
+    name: "Shotgun",
+    kind: "gun",
+    key: null,
+    price: CONFIG.shotgun.price,
+    describe: (level) =>
+      `Hold to fire ${CONFIG.shotgun.pellets} pellets · ${Math.round(CONFIG.shotgun.damage * weaponPower(level))} each`,
   },
   // Passive weapons have no key and go last.
   {

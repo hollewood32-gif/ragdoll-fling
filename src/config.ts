@@ -162,5 +162,25 @@ export const CONFIG = {
     damage: 350,
     knockback: 22,
   },
+  // Katana: a light, fast swung blade. Short cooldown so quick slashes chain.
+  katana: {
+    price: 2000,
+    length: 110,
+    width: 6,
+    damage: 0.7,
+    knockback: 1.5, // slices more than it shoves
+    cooldownMs: 150,
+  },
+  // Shotgun: held and auto-aimed. Each shot is a spread of pellets that only
+  // fly a short way, so it's strongest up close.
+  shotgun: {
+    price: 3500,
+    pellets: 6,
+    spread: 0.5, // radians between the outermost pellets
+    damage: 35, // per pellet
+    knockback: 6, // per pellet
+    rangeSteps: 18, // pellets vanish after this many physics steps (~500 px)
+    cooldownMs: 900,
+  },
   spikesPrice: 3000,
 };
