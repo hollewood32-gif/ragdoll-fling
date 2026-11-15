@@ -2006,9 +2006,8 @@ function drawHud(): void {
     // With two or more kinds of hit in the combo, show how many (they raise the cap).
     const kinds = combo.sources.size;
     let label = kinds > 1 ? `COMBO x${combo.multiplier.toFixed(2)} · ${kinds} weapons` : `COMBO x${combo.multiplier.toFixed(2)}`;
-    // Weapon hits are adding less: nudge the player to switch (turns orange).
-    const usingWeapons = [...combo.sources].some((s) => s !== "throw");
-    if (usingWeapons && combo.fading) {
+    // Stayed on one weapon too long: the combo is draining, so nudge the player to switch.
+    if (combo.draining) {
       label += " · switch!";
       ctx.fillStyle = "#f78c6b";
     }

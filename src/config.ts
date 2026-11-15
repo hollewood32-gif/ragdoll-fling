@@ -34,6 +34,9 @@ export const CONFIG = {
   // Combo fade: for every this-many seconds on the same weapon without
   // switching, each weapon hit adds half as much to the combo. Throws never fade.
   comboFadeSeconds: 2,
+  // After comboFadeSeconds on one weapon, a combo with weapon hits in it drains
+  // this much per second (down to x1) until the player switches weapon.
+  comboDrainPerSecond: 0.5,
 
   // The same body part can't score again until this many milliseconds pass.
   hitCooldownMs: 120,
