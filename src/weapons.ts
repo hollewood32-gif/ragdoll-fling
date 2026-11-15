@@ -18,6 +18,8 @@ export type WeaponId =
   | "rpg"
   | "katana"
   | "shotgun"
+  | "flamethrower"
+  | "boomerang"
   | "spikes";
 
 /** "melee" is swung, "thrown" is flung by hand, "gun" fires while held, "passive" is always on once bought. */
@@ -129,6 +131,23 @@ export const WEAPONS: WeaponInfo[] = [
     price: CONFIG.shotgun.price,
     describe: (level) =>
       `Hold to fire ${CONFIG.shotgun.pellets} pellets · ${Math.round(CONFIG.shotgun.damage * weaponPower(level))} each`,
+  },
+  {
+    id: "flamethrower",
+    name: "Flamethrower",
+    kind: "gun",
+    key: null,
+    price: CONFIG.flamethrower.price,
+    describe: (level) =>
+      `Hold to spray fire; parts burn · ${Math.round(CONFIG.flamethrower.burnDamage * weaponPower(level))} a tick each`,
+  },
+  {
+    id: "boomerang",
+    name: "Boomerang",
+    kind: "thrown",
+    key: null,
+    price: CONFIG.boomerang.price,
+    describe: (level) => `Fling it; it comes back · ${Math.round(CONFIG.boomerang.damage * weaponPower(level))} a hit`,
   },
   // Passive weapons have no key and go last.
   {

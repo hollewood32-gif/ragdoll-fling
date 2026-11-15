@@ -131,7 +131,7 @@ describe("explosives", () => {
     expect(nextWeaponPrice("cannon", 0)).toBe(4000);
     expect(nextWeaponPrice("rpg", 0)).toBe(7500);
     const all = Object.fromEntries(Object.keys(STARTING_WEAPONS).map((id) => [id, 1])) as typeof STARTING_WEAPONS;
-    expect(selectableWeapons(all).map((w) => w.key)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 0, null]);
+    expect(selectableWeapons(all).map((w) => w.key)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 0, null, null, null]);
   });
 
   it("blasts hit hardest at the center and fade to a quarter at the edge", () => {
@@ -176,6 +176,19 @@ describe("katana and shotgun", () => {
       ["fist", 1],
       ["katana", 0],
       ["shotgun", null],
+    ]);
+  });
+});
+
+describe("flamethrower and boomerang", () => {
+  it("cost 6,000 and 3,000, and are picked without a number key", () => {
+    expect(nextWeaponPrice("flamethrower", 0)).toBe(6000);
+    expect(nextWeaponPrice("boomerang", 0)).toBe(3000);
+    const owned = { ...STARTING_WEAPONS, flamethrower: 1, boomerang: 1 };
+    expect(selectableWeapons(owned).map((w) => [w.id, w.key])).toEqual([
+      ["fist", 1],
+      ["flamethrower", null],
+      ["boomerang", null],
     ]);
   });
 });

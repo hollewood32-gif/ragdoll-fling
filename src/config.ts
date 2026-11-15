@@ -182,5 +182,33 @@ export const CONFIG = {
     rangeSteps: 18, // pellets vanish after this many physics steps (~500 px)
     cooldownMs: 900,
   },
+  // Flamethrower: held and auto-aimed. Sprays a short cone of flame; body
+  // parts the flames touch catch fire. Each burn tick adds up every burning
+  // part's damage and counts as ONE hit, so fire can't flood the combo.
+  flamethrower: {
+    price: 6000,
+    cooldownMs: 50, // a new puff of flame this often
+    flameSpeed: 11, // pixels per step
+    spread: 0.35, // radians across the cone
+    flameSeconds: 0.35, // how long a puff lives (sets the range, about 230 px)
+    burnSeconds: 2.5,
+    burnTickMs: 250,
+    burnDamage: 8, // per burning part, per tick
+    knockback: 0.3, // flames barely push
+  },
+  // Boomerang: held like a grenade, then flung. It curves back toward where it
+  // was thrown from and can hit on the way out and on the way back.
+  boomerang: {
+    price: 3000,
+    cooldownMs: 1000,
+    minSpeed: 14, // a weak flick still sends it toward the dummy
+    maxSpeed: 26,
+    returnPull: 0.6, // pixels per step squared, back toward the thrower
+    damage: 90,
+    knockback: 8,
+    hitCooldownMs: 400, // the same part can be hit once on the way out and once back
+    maxSeconds: 3,
+    catchRadius: 30,
+  },
   spikesPrice: 3000,
 };

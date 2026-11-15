@@ -426,6 +426,16 @@ function buildWeapon(id: WeaponId, at: Matter.Vector): BuiltWeapon {
       handle: Vector.sub({ x: at.x - length / 2 + 6, y: at.y }, body.position),
     };
   }
+  if (id === "boomerang") {
+    // Held in the hand like a grenade (a "bomb" body, so it does no swing damage).
+    const body = Bodies.rectangle(at.x, at.y, 34, 8, {
+      label: "bomb",
+      density: 0.003,
+      collisionFilter: weaponFilter,
+      render: { fillStyle: "#c68642" },
+    });
+    return { body, hold: { x: 0, y: 0 }, handle: { x: 0, y: 0 } };
+  }
   if (id === "grenade" || id === "cluster") {
     // Labelled "bomb", not "weapon": a held bomb doesn't deal swing damage.
     const body = Bodies.circle(at.x, at.y, id === "grenade" ? CONFIG.grenade.radius : CONFIG.cluster.radius, {
@@ -577,16 +587,25 @@ function gunStats(id: WeaponId) {
 }
 
 // How far each held gun kicks back when it fires (pixels).
-const RECOIL: Partial<Record<WeaponId, number>> = { pistol: 5, revolver: 12, shotgun: 14, cannon: 16, rpg: 10 };
+const RECOIL: Partial<Record<WeaponId, number>> = { pistol: 5, revolver: 12, shotgun: 14, cannon: 16, rpg: 10, flamethrower: 1 };
 
 // Grip to muzzle, for drawing and firing.
-const GUN_LENGTH: Partial<Record<WeaponId, number>> = { pistol: 30, revolver: 42, shotgun: 50, cannon: 48, rpg: 60 };
+const GUN_LENGTH: Partial<Record<WeaponId, number>> = {
+  pistol: 30,
+  revolver: 42,
+  shotgun: 50,
+  cannon: 48,
+  rpg: 60,
+  flamethrower: 44,
+};
 
 // Time between uses for weapons that fire or get thrown (swung weapons have none).
 const COOLDOWN_MS: Partial<Record<WeaponId, number>> = {
   pistol: CONFIG.pistol.cooldownMs,
   revolver: CONFIG.revolver.cooldownMs,
   shotgun: CONFIG.shotgun.cooldownMs,
+  flamethrower: CONFIG.flamethrower.cooldownMs,
+  boomerang: CONFIG.boomerang.cooldownMs,
   cannon: CONFIG.cannon.cooldownMs,
   rpg: CONFIG.rpg.cooldownMs,
   grenade: CONFIG.grenade.cooldownMs,
@@ -671,6 +690,11 @@ function updateGun(): void {
 
   const dir = { x: Math.cos(gunHeld.angle), y: Math.sin(gunHeld.angle) };
   const muzzle = Vector.add(gunHeld.at, Vector.mult(dir, GUN_LENGTH[id] ?? 30));
+  if (id === "flamethrower") {
+    emitFlames(muzzle, gunHeld.angle); // no muzzle flash or big kick, just fire
+    gunHeld.recoil = RECOIL.flamethrower ?? 1;
+    return;
+  }
   const heavy = id !== "pistol";
   if (id === "cannon") {
     fireCannonball(muzzle, dir);
@@ -805,6 +829,13 @@ function throwBomb(): void {
   if (!held) return;
   const { body, id } = held;
   held = null;
+  if (id === "boomerang") {
+    // A boomerang is not a bomb: it flies on its own path and curves back.
+    Composite.remove(engine.world, body);
+    launchBoomerang(body);
+    lastShotAt.set(id, engine.timing.timestamp);
+    return;
+  }
   const speed = Vector.magnitude(body.velocity);
   if (speed > CONFIG.maxThrowSpeed) Body.setVelocity(body, Vector.mult(body.velocity, CONFIG.maxThrowSpeed / speed));
   body.collisionFilter = { ...bombFilter, group: 0 };
@@ -1002,6 +1033,173 @@ function clearExplosives(): void {
   blasts.length = 0;
 }
 
+// ---------------------------------------------------------------------------
+// Flamethrower: flame puffs set body parts on fire
+// ---------------------------------------------------------------------------
+// A puff of flame: drifts forward, slows, grows and fades. Not a physics body.
+interface Flame {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number; // seconds left
+}
+const flames: Flame[] = [];
+const MAX_FLAMES = 120;
+
+// Body part -> seconds of burning left. Refreshed whenever a flame touches it.
+const burning = new Map<Matter.Body, number>();
+let burnTickIn = 0; // seconds until the next burn tick
+let lastFlameSound = -Infinity;
+
+function emitFlames(muzzle: Matter.Vector, angle: number): void {
+  const f = CONFIG.flamethrower;
+  for (let i = 0; i < 2 && flames.length < MAX_FLAMES; i++) {
+    const a = angle + (Math.random() - 0.5) * f.spread;
+    const speed = f.flameSpeed * (0.8 + Math.random() * 0.4);
+    flames.push({ ...muzzle, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, life: f.flameSeconds });
+  }
+  // A soft roar, not one per puff.
+  const now = engine.timing.timestamp;
+  if (now - lastFlameSound > 150) {
+    lastFlameSound = now;
+    sound.flame();
+  }
+}
+
+// Every physics step: move flames, light anything they touch, and tick the fire.
+function updateFlames(dt: number): void {
+  const f = CONFIG.flamethrower;
+  for (let i = flames.length - 1; i >= 0; i--) {
+    const flame = flames[i];
+    flame.x += flame.vx;
+    flame.y += flame.vy;
+    flame.vx *= 0.93; // flames slow down and float up a little
+    flame.vy = flame.vy * 0.93 - 0.15;
+    flame.life -= dt;
+    if (flame.life <= 0) {
+      flames.splice(i, 1);
+      continue;
+    }
+    if (phase !== "playing") continue;
+    const touched = pickPart(ragdoll.parts, flame, 6);
+    if (touched) {
+      burning.set(touched.body, f.burnSeconds);
+      const push = Vector.mult(Vector.normalise({ x: flame.vx, y: flame.vy }), f.knockback);
+      Body.setVelocity(touched.body, Vector.add(touched.body.velocity, push));
+    }
+  }
+
+  for (const [part, left] of burning) {
+    if (left - dt <= 0) burning.delete(part);
+    else burning.set(part, left - dt);
+    // Now and then an ember floats up off the burning part.
+    if (Math.random() < 0.15 && sparks.length < MAX_SPARKS) {
+      sparks.push({
+        x: part.position.x + (Math.random() - 0.5) * 10,
+        y: part.position.y,
+        vx: (Math.random() - 0.5) * 30,
+        vy: -60 - Math.random() * 60,
+        life: 0.5,
+        maxLife: 0.5,
+        size: 2 + Math.random() * 2,
+        color: Math.random() < 0.5 ? "#ffd166" : "#f78c6b",
+      });
+    }
+  }
+
+  // Each tick, every burning part adds its damage, and the total is one hit.
+  burnTickIn -= dt;
+  if (burnTickIn > 0) return;
+  burnTickIn = f.burnTickMs / 1000;
+  if (burning.size === 0 || phase !== "playing") return;
+  const power = weaponPower(activeWeapons.flamethrower);
+  let hottest: Matter.Body | null = null;
+  for (const part of burning.keys()) hottest ??= part;
+  const total = f.burnDamage * power * burning.size;
+  const { x, y } = hottest!.position;
+  if (registerHit(hottest!, total, 0, { x, y, nx: 0, ny: -1 }, "flamethrower")) weaponUsed = true;
+}
+
+// ---------------------------------------------------------------------------
+// Boomerang: flung by hand, curves back toward where it was thrown from
+// ---------------------------------------------------------------------------
+interface Boomerang {
+  x: number;
+  y: number;
+  vx: number; // pixels per step
+  vy: number;
+  home: Matter.Vector; // where it was thrown from: it curves back here
+  age: number; // seconds since the throw
+  spin: number; // angle, for drawing
+}
+const boomerangs: Boomerang[] = [];
+
+/** Letting go of a held boomerang: it flies off with the hand's speed (at least a minimum, aimed at the dummy). */
+function launchBoomerang(body: Matter.Body): void {
+  const b = CONFIG.boomerang;
+  let velocity = { x: body.velocity.x, y: body.velocity.y };
+  const speed = Vector.magnitude(velocity);
+  if (speed < b.minSpeed) {
+    // A gentle release still sends it toward the dummy.
+    const toward = Vector.normalise(Vector.sub(dummyCenter(), body.position));
+    velocity = Vector.mult(toward, b.minSpeed);
+  } else if (speed > b.maxSpeed) {
+    velocity = Vector.mult(velocity, b.maxSpeed / speed);
+  }
+  const at = { x: body.position.x, y: body.position.y };
+  boomerangs.push({ ...at, vx: velocity.x, vy: velocity.y, home: at, age: 0, spin: 0 });
+}
+
+// Every physics step: pull each boomerang back home, and hit what it crosses.
+function updateBoomerangs(dt: number): void {
+  const b = CONFIG.boomerang;
+  for (let i = boomerangs.length - 1; i >= 0; i--) {
+    const boom = boomerangs[i];
+    boom.age += dt;
+    boom.spin += 0.5;
+    const pull = Vector.mult(Vector.normalise(Vector.sub(boom.home, boom)), b.returnPull);
+    boom.vx += pull.x;
+    boom.vy += pull.y;
+    const from = { x: boom.x, y: boom.y };
+    const to = { x: boom.x + boom.vx, y: boom.y + boom.vy };
+
+    if (phase === "playing") {
+      for (const hit of Query.ray(ragdoll.parts, from, to, 16)) {
+        const part = ragdoll.parts.find((p) => p === hit.bodyA || p === hit.bodyB);
+        if (part) boomerangHit(part, boom);
+      }
+    }
+
+    // Bounce off the walls instead of leaving the arena.
+    boom.x = Math.min(W - 5, Math.max(5, to.x));
+    boom.y = Math.min(H - 5, Math.max(5, to.y));
+    if (boom.x !== to.x) boom.vx = -boom.vx * 0.6;
+    if (boom.y !== to.y) boom.vy = -boom.vy * 0.6;
+
+    const home = Vector.magnitude(Vector.sub(boom.home, boom)) < b.catchRadius && boom.age > 0.4;
+    if (home || boom.age > b.maxSeconds) boomerangs.splice(i, 1); // caught (or gave up)
+  }
+}
+
+function boomerangHit(part: Matter.Body, boom: Boomerang): void {
+  const b = CONFIG.boomerang;
+  const power = weaponPower(activeWeapons.boomerang);
+  const direction = Vector.normalise({ x: boom.vx, y: boom.vy });
+  const origin = { x: boom.x, y: boom.y, nx: direction.x, ny: direction.y };
+  if (!registerHit(part, b.damage * power, b.hitCooldownMs, origin, "boomerang")) return;
+  weaponUsed = true;
+  Body.setVelocity(part, Vector.add(part.velocity, Vector.mult(direction, b.knockback * power)));
+}
+
+/** Clears flames, fire and boomerangs (for a new round). */
+function clearFireAndBoomerangs(): void {
+  flames.length = 0;
+  burning.clear();
+  burnTickIn = 0;
+  boomerangs.length = 0;
+}
+
 // Grey dust where a bullet hits a wall.
 function puff(at: Matter.Vector, count: number): void {
   for (let i = 0; i < count && sparks.length < MAX_SPARKS; i++) {
@@ -1190,6 +1388,7 @@ function resetRound(): void {
   shotFlashes.length = 0;
   bullets.length = 0;
   clearExplosives();
+  clearFireAndBoomerangs();
   shake = 0;
   resultsScreen.hidden = true;
 }
@@ -1651,6 +1850,8 @@ function update(dt: number): void {
   updateBullets();
   updateBombs(dt);
   updateProjectiles(dt);
+  updateFlames(dt);
+  updateBoomerangs(dt);
   updateGunCooldowns();
 
   shake *= 0.88; // fade the shake out quickly
@@ -1729,6 +1930,7 @@ function draw(): void {
 
   if (gunHeld) drawGun(gunHeld);
   drawExplosives();
+  drawFireAndBoomerangs();
 
   // Sparks fade out as they die
   for (const s of sparks) {
@@ -1877,6 +2079,15 @@ function drawGun(gun: GunHeld): void {
     ctx.fillRect(-16, -4, 22, 10);
     ctx.fillStyle = "#4a4e69"; // dark barrel
     ctx.fillRect(6, -6, length - 6, 8);
+  } else if (gun.id === "flamethrower") {
+    ctx.fillStyle = "#ef476f"; // fuel tank
+    ctx.beginPath();
+    ctx.arc(-4, 6, 9, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#6c7086"; // nozzle
+    ctx.fillRect(0, -5, length, 8);
+    ctx.fillStyle = "#ffd166"; // pilot light
+    ctx.fillRect(length - 4, -7, 4, 3);
   } else if (gun.id === "rpg") {
     ctx.fillStyle = "#556b2f"; // a long green tube
     ctx.fillRect(-20, -7, length + 20, 14);
@@ -1920,6 +2131,55 @@ function drawBomb(body: Matter.Body, fuseLeft: number | null): void {
 }
 
 // Bombs, cannonballs, rockets and fireballs.
+// A boomerang: two wooden arms in a wide V.
+function drawBoomerangShape(at: Matter.Vector, angle: number): void {
+  ctx.save();
+  ctx.translate(at.x, at.y);
+  ctx.rotate(angle);
+  ctx.strokeStyle = "#c68642";
+  ctx.lineWidth = 7;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(-16, 8);
+  ctx.lineTo(0, -6);
+  ctx.lineTo(16, 8);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// Flames, fire on burning parts, and boomerangs in flight.
+function drawFireAndBoomerangs(): void {
+  // Burning parts glow and flicker orange.
+  for (const part of burning.keys()) {
+    ctx.globalAlpha = 0.35 + Math.random() * 0.3;
+    ctx.fillStyle = "#f78c6b";
+    ctx.beginPath();
+    if (part.circleRadius) {
+      ctx.arc(part.position.x, part.position.y, part.circleRadius + 2, 0, Math.PI * 2);
+    } else {
+      const [first, ...rest] = part.vertices;
+      ctx.moveTo(first.x, first.y);
+      for (const v of rest) ctx.lineTo(v.x, v.y);
+      ctx.closePath();
+    }
+    ctx.fill();
+  }
+
+  // Flame puffs grow as they age, and fade from yellow to orange.
+  const maxLife = CONFIG.flamethrower.flameSeconds;
+  for (const flame of flames) {
+    const age = 1 - flame.life / maxLife; // 0 new, 1 gone
+    ctx.globalAlpha = 0.8 * (1 - age);
+    ctx.fillStyle = age < 0.35 ? "#ffd166" : "#f78c6b";
+    ctx.beginPath();
+    ctx.arc(flame.x, flame.y, 5 + age * 16, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  for (const boom of boomerangs) drawBoomerangShape(boom, boom.spin);
+}
+
 function drawExplosives(): void {
   for (const bomb of bombs) drawBomb(bomb.body, bomb.fuseLeft);
   for (const ball of cannonballs) drawBody(ball.body);
@@ -1962,6 +2222,10 @@ function drawExplosives(): void {
 function drawHeldWeapon(weapon: HeldWeapon): void {
   if (weapon.id === "fist") {
     drawFist(weapon.body);
+    return;
+  }
+  if (weapon.id === "boomerang") {
+    drawBoomerangShape(weapon.body.position, weapon.body.angle);
     return;
   }
   if (weaponInfo(weapon.id).kind === "thrown") {
