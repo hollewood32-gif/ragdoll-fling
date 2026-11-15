@@ -235,9 +235,10 @@ function toWorld(e: PointerEvent): Matter.Vector {
 interface HeldWeapon {
   id: WeaponId;
   body: Matter.Body;
-  grip: Matter.Vector; // where the hand holds it, from its center (at angle 0)
-  target: Matter.Vector; // where the pointer is: the grip chases it
-  trailAngle: number; // long weapons turn toward this: behind the hand
+  hold: Matter.Vector; // the hitting end, under the pointer (from the center, at angle 0)
+  handle: Matter.Vector; // where the grip tape is drawn
+  target: Matter.Vector; // where the pointer is: the hitting end chases it
+  trailAngle: number; // long weapons turn toward this so the handle trails
   pointerId: number;
 }
 let held: HeldWeapon | null = null;
@@ -321,7 +322,7 @@ canvas.addEventListener("pointercancel", (e) => {
 });
 
 // ---------------------------------------------------------------------------
-// Swung weapons: a real physics body held by its grip
+// Swung weapons: a real physics body whose hitting end follows the pointer
 // ---------------------------------------------------------------------------
 // How each swung weapon hits, from config.ts.
 const SWING_STATS: Record<"fist" | "bat" | "axe", { damage: number; knockback: number; cooldownMs: number }> = {
@@ -336,13 +337,18 @@ function swingStats(id: WeaponId) {
 
 const weaponFilter = { category: CATEGORY.weapon, mask: CATEGORY.ragdoll };
 
+/** A swung weapon's shape. Offsets are from the body's center, at angle 0. */
+interface BuiltWeapon {
+  body: Matter.Body;
+  hold: Matter.Vector; // the point that sits under the pointer (the hitting end)
+  handle: Matter.Vector; // where the grip tape is drawn
+}
+
 /**
- * Builds the weapon's body with its grip at the origin's local position.
- * Returns the body and the grip's offset from the body's center (at angle 0).
- * Long weapons point along +x from the grip, so their angle is the direction
- * from the hand to the far end.
+ * Builds a swung weapon at `at`. Long weapons lie along +x from the handle to
+ * the hitting end, so their angle is the direction from handle to head.
  */
-function buildWeapon(id: WeaponId, at: Matter.Vector): { body: Matter.Body; grip: Matter.Vector } {
+function buildWeapon(id: WeaponId, at: Matter.Vector): BuiltWeapon {
   if (id === "bat") {
     const { length, width } = CONFIG.bat;
     const body = Bodies.rectangle(at.x, at.y, length, width, {
@@ -352,7 +358,8 @@ function buildWeapon(id: WeaponId, at: Matter.Vector): { body: Matter.Body; grip
       collisionFilter: weaponFilter,
       render: { fillStyle: "#c68642" },
     });
-    return { body, grip: { x: -length / 2 + 8, y: 0 } };
+    // Held near the thick end (the barrel), so the barrel is under the pointer.
+    return { body, hold: { x: length / 2 - 18, y: 0 }, handle: { x: -length / 2 + 8, y: 0 } };
   }
   if (id === "axe") {
     const { length, width, headWidth, headHeight } = CONFIG.axe;
@@ -362,15 +369,19 @@ function buildWeapon(id: WeaponId, at: Matter.Vector): { body: Matter.Body; grip
       render: { fillStyle: "#8d5a3b" },
     });
     // The blade sits across the far end, sticking out to one side.
-    const head = Bodies.rectangle(at.x + length / 2 - headWidth / 2, at.y - headHeight / 4, headWidth, headHeight, {
+    const headCenter = { x: at.x + length / 2 - headWidth / 2, y: at.y - headHeight / 4 };
+    const head = Bodies.rectangle(headCenter.x, headCenter.y, headWidth, headHeight, {
       label: "weapon",
       collisionFilter: weaponFilter,
       render: { fillStyle: "#c9d1d9" },
     });
     const body = Body.create({ parts: [handle, head], label: "weapon", collisionFilter: weaponFilter });
     Body.setDensity(body, 0.006);
-    const gripWorld = { x: at.x - length / 2 + 6, y: at.y };
-    return { body, grip: Vector.sub(gripWorld, body.position) };
+    return {
+      body,
+      hold: Vector.sub(headCenter, body.position), // the blade is under the pointer
+      handle: Vector.sub({ x: at.x - length / 2 + 6, y: at.y }, body.position),
+    };
   }
   const body = Bodies.circle(at.x, at.y, CONFIG.fist.radius, {
     label: "weapon",
@@ -378,19 +389,19 @@ function buildWeapon(id: WeaponId, at: Matter.Vector): { body: Matter.Body; grip
     collisionFilter: weaponFilter,
     render: { fillStyle: "#f4c095" },
   });
-  return { body, grip: { x: 0, y: 0 } };
+  return { body, hold: { x: 0, y: 0 }, handle: { x: 0, y: 0 } };
 }
 
 function pickUpWeapon(id: WeaponId, point: Matter.Vector, pointerId: number): void {
-  const { body, grip } = buildWeapon(id, point);
+  const { body, hold, handle } = buildWeapon(id, point);
   body.frictionAir = 0;
   body.restitution = 0.2;
-  // Long weapons start pointing straight up from the hand.
-  const angle = grip.x === 0 && grip.y === 0 ? 0 : -Math.PI / 2;
+  // Long weapons start upright: the head under the pointer, the handle below it.
+  const angle = hold.x === 0 && hold.y === 0 ? 0 : -Math.PI / 2;
   Body.setAngle(body, angle);
-  Body.setPosition(body, Vector.sub(point, Vector.rotate(grip, angle)));
+  Body.setPosition(body, Vector.sub(point, Vector.rotate(hold, angle)));
   Composite.add(engine.world, body);
-  held = { id, body, grip, target: point, pointerId, trailAngle: angle };
+  held = { id, body, hold, handle, target: point, pointerId, trailAngle: angle };
 }
 
 function putAwayWeapon(): void {
@@ -411,30 +422,31 @@ function pointVelocity(body: Matter.Body, point: Matter.Vector): Matter.Vector {
   return { x: body.velocity.x - w * r.y, y: body.velocity.y + w * r.x };
 }
 
-// Every physics step: move the grip toward the pointer, ignoring gravity.
-// Setting velocities (not positions) lets the physics engine see how fast
-// the weapon is moving, so a fast swing hits harder. Long weapons also turn
-// so the far end trails behind the hand, which whips it around on a direction
-// change.
+// Every physics step: move the hitting end toward the pointer, ignoring gravity.
+// Setting velocities (not positions) lets the physics engine see how fast the
+// weapon is moving, so a fast swing hits harder. Long weapons also turn so the
+// handle trails behind the motion: sweeping sideways swings the weapon's side
+// through the dummy, like a real swing.
 Events.on(engine, "beforeUpdate", () => {
   if (!held) return;
-  const { body, target, grip } = held;
-  const r = Vector.rotate(grip, body.angle); // grip, measured from the center
-  const gripWorld = Vector.add(body.position, r);
+  const { body, target, hold } = held;
+  const r = Vector.rotate(hold, body.angle); // hitting end, measured from the center
+  const holdWorld = Vector.add(body.position, r);
 
-  let hand = Vector.mult(Vector.sub(target, gripWorld), CONFIG.swingFollow);
+  let hand = Vector.mult(Vector.sub(target, holdWorld), CONFIG.swingFollow);
   const speed = Vector.magnitude(hand);
   if (speed > CONFIG.maxSwingSpeed) hand = Vector.mult(hand, CONFIG.maxSwingSpeed / speed);
 
   let spin = 0;
-  const isLong = grip.x !== 0 || grip.y !== 0;
+  const isLong = hold.x !== 0 || hold.y !== 0;
   if (isLong) {
-    if (speed > 2) held.trailAngle = Math.atan2(-hand.y, -hand.x); // behind the hand's motion
+    // Handle behind, head ahead: the weapon points the way the hand moves.
+    if (speed > 2) held.trailAngle = Math.atan2(hand.y, hand.x);
     const turn = angleBetween(body.angle, held.trailAngle) * CONFIG.swingTurnRate;
     spin = Math.max(-CONFIG.maxSwingTurn, Math.min(CONFIG.maxSwingTurn, turn));
   }
 
-  // The center's velocity that makes the grip itself move at `hand` while spinning.
+  // The center's velocity that makes the hitting end itself move at `hand` while spinning.
   Body.setVelocity(body, { x: hand.x + spin * r.y, y: hand.y - spin * r.x });
   Body.setAngularVelocity(body, spin);
   // Cancel gravity so the weapon doesn't sag below the pointer.
@@ -1188,7 +1200,7 @@ function drawSpikes(): void {
 }
 
 // The held weapon. The Bat and Axe are drawn as their physics shapes (the
-// Axe is two shapes: handle and blade), with dark grip tape where the hand is.
+// Axe is two shapes: handle and blade), with dark grip tape on the handle.
 function drawHeldWeapon(weapon: HeldWeapon): void {
   if (weapon.id === "fist") {
     drawFist(weapon.body);
@@ -1198,7 +1210,7 @@ function drawHeldWeapon(weapon: HeldWeapon): void {
   const pieces = body.parts.length > 1 ? body.parts.slice(1) : [body];
   for (const piece of pieces) drawBody(piece);
 
-  const grip = Vector.add(body.position, Vector.rotate(weapon.grip, body.angle));
+  const grip = Vector.add(body.position, Vector.rotate(weapon.handle, body.angle));
   const along = Vector.rotate({ x: 1, y: 0 }, body.angle);
   ctx.strokeStyle = "#3a2618";
   ctx.lineWidth = weapon.id === "bat" ? CONFIG.bat.width : CONFIG.axe.width;

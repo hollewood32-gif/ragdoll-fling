@@ -58,7 +58,7 @@ export const CONFIG = {
 
   // Swung (melee) weapons follow the pointer like a hand. Each physics step
   // they cover this fraction of the gap to the pointer, up to a top speed.
-  swingFollow: 0.5,
+  swingFollow: 0.8,
   maxSwingSpeed: 40,
   // A swung weapon can land at most one scoring hit per this many milliseconds
   // (across all body parts), so fast swipes over a lying dummy cannot farm points.
@@ -69,11 +69,11 @@ export const CONFIG = {
     damage: 0.6, // fraction of a thrown hit at the same speed
     knockback: 2, // extra push on the part that was hit
   },
-  // Long weapons (Bat, Axe) are held by one end. The far end trails behind
-  // the hand's motion, so changing direction whips it around. Each step the
-  // weapon turns this fraction of the way to that trailing angle, up to a cap
-  // (radians per step).
-  swingTurnRate: 0.25,
+  // Long weapons (Bat, Axe): the hitting end sits under the pointer and the
+  // handle trails behind the motion, so a sideways sweep swings the side of the
+  // weapon through the dummy. Each step it turns this fraction of the way to the
+  // trailing angle, up to a cap (radians per step).
+  swingTurnRate: 0.15,
   maxSwingTurn: 0.3,
   bat: {
     price: 1000,
