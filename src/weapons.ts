@@ -2,12 +2,12 @@
 // No drawing or physics here, so the rules can be unit tested.
 //
 // Weapons arrive over several PRs. Only the ones listed in WEAPONS are in the
-// shop; later PRs add the Bat, Axe, guns and explosives to this list.
+// shop; later PRs add the guns and explosives to this list.
 
 import type { ScoreStorage } from "./bestScore";
 import { CONFIG } from "./config";
 
-export type WeaponId = "fist" | "spikes";
+export type WeaponId = "fist" | "bat" | "axe" | "spikes";
 
 /** "melee" is swung, "passive" is always on once bought. Later: "tap" (guns, explosives). */
 export type WeaponKind = "melee" | "passive";
@@ -38,6 +38,23 @@ export const WEAPONS: WeaponInfo[] = [
     price: CONFIG.fist.price,
     describe: (level) => `Swing to punch · ${Math.round(weaponPower(level) * 100)}% power`,
   },
+  {
+    id: "bat",
+    name: "Bat",
+    kind: "melee",
+    key: 2,
+    price: CONFIG.bat.price,
+    describe: (level) => `Long reach, huge knockback · ${Math.round(weaponPower(level) * 100)}% power`,
+  },
+  {
+    id: "axe",
+    name: "Axe",
+    kind: "melee",
+    key: 3,
+    price: CONFIG.axe.price,
+    describe: (level) => `Heavy, big damage · ${Math.round(weaponPower(level) * 100)}% power`,
+  },
+  // Passive weapons have no key and go last.
   {
     id: "spikes",
     name: "Spiked walls",
