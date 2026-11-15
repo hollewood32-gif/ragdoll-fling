@@ -107,7 +107,7 @@ Original game, inspired by the *feel* of old ragdoll sandbox toys, not a copy of
 
 ### Weapons design (approved 2026-11-14, controls updated after playtesting 2026-11-15)
 
-- **Controls:** pressing on the dummy always grabs and throws it. Pressing empty space uses the selected weapon. Switch weapons with keys 1-9 or by tapping the weapon bar near the top of the arena (phones have no number keys).
+- **Controls:** pressing on the dummy always grabs and throws it. Pressing empty space uses the selected weapon. Switch weapons with the number keys or by tapping the weapon bar near the top of the arena (phones have no number keys). Since phase 10 the keys follow the Loadout order, so the key numbers in the list below are only the default order.
   - **Swung (Fist, Bat, Axe):** the weapon appears in your hand as a real physics object. Its hitting end (fist, bat barrel, axe blade) follows the pointer and the handle trails behind. Damage scales with the speed of the point that touches the dummy. Let go to put it away.
   - **Guns (Pistol, Revolver, Cannon, RPG):** held at the pointer and auto-aimed at the dummy's center; hold to keep firing. Bullets and rockets check their whole path each step (`Matter.Query.ray`) so they can't skip through thin limbs. The Cannon aims high so gravity drops its ball onto the dummy (`launchAngle`).
   - **Thrown (Grenade, Cluster bomb):** held like the Fist, then flung: letting go keeps the hand's speed. The fuse starts when it leaves the hand.
@@ -130,20 +130,23 @@ Original game, inspired by the *feel* of old ragdoll sandbox toys, not a copy of
 - **Art and sound:** shapes and sounds made in code, like the rest of the game.
 - All numbers (damage, knockback, cooldowns, prices) live in `config.ts` and get tuned after playtesting.
 
-10. [ ] More weapons and the variety combo. In progress, as four PRs:
-   - [x] PR: save the design below.
-   - [ ] PR: variety combo, plus switching with the mouse wheel, Q/E and key 0.
-   - [ ] PR: Katana and Shotgun.
-   - [ ] PR: Flamethrower and Boomerang.
+10. [x] More weapons, the variety combo, combo drain and Loadout. (Done 2026-11-15.) Built as:
+   - [x] PR #31: save the design below.
+   - [x] PR #32: variety combo, plus switching with the mouse wheel, Q/E and key 0.
+   - [x] PR #33: Katana and Shotgun (a shotgun blast steps the combo once).
+   - [x] PR #34: Flamethrower (a burn tick adds up every burning part as one hit) and Boomerang.
+   - [x] PR #35 and #36: combo drain (#35 only slowed gains; playtesting showed the combo held at x6, so #36 makes it drain).
+   - [x] PR #37: Loadout screen to choose the weapon order.
 
 ### Variety combo and more weapons design (approved 2026-11-15)
 
 - **Variety combo:** each different weapon type that lands a hit during the current combo raises the combo cap by x1. Throwing counts as one type (thrown hits and every wall hit). Throws only: x5 (unchanged, so Pure rounds and the leaderboard are unaffected). Two types: x6. Up to x10 with six or more. The step per hit stays +0.25. When the combo breaks, the set of types resets. The HUD shows the count, e.g. "COMBO x6.25 · 3 weapons".
-- **Switching:** mouse wheel or Q / E cycles through owned weapons; keys 1-9 and 0 pick directly; the weapon bar still works for taps on phones. Weapons past the tenth have no number key.
+- **Combo drain** (added after playtesting): after 2 s on the same weapon (`comboFadeSeconds`), a combo that has weapon hits in it drains x0.5 a second (`comboDrainPerSecond`) and no hit adds to it, wall hits included, until the player switches weapon. Throws-only combos never drain. The label turns orange and says "switch!" while draining.
+- **Switching and order:** mouse wheel or Q / E cycles through owned weapons; the weapon bar works for taps on phones. The Loadout screen (menu) sets the order, saved as `ragdoll-fling:weapon-order`; keys follow it: the first owned weapon is key 1 ... the tenth is key 0, later ones have no key (`keyForSlot`).
 - **New weapons** (how it works, buy price):
-  - **Katana** (key 0): swung like the Bat but light and fast; short cooldown so quick slashes chain hits; small knockback. 2,000.
+  - **Katana**: swung like the Bat but light and fast; short cooldown so quick slashes chain hits; small knockback. 2,000.
   - **Shotgun**: held gun; each shot is 6 pellets in a spread with a big close-range kick; slow reload. 3,500.
-  - **Flamethrower**: held; sprays a short cone of fire. Parts it touches catch fire and take damage over time; each burn tick is a hit. 6,000.
+  - **Flamethrower**: held; sprays a short cone of fire. Parts it touches catch fire for 2.5 s; four times a second the fire adds up every burning part's damage and counts it as one hit. 6,000.
   - **Boomerang**: thrown like a grenade; it curves back toward the hand and can hit on the way out and on the way back. 3,000.
 - Same rules as the other weapons: +15% per level, level-up prices 0.5x to 2x the buy price, disabled by Upgrades Off, unlocked in Sandbox, all numbers in `config.ts`.
 
