@@ -93,24 +93,21 @@ export const CONFIG = {
     knockback: 1.5, // ...that don't push the dummy far
     cooldownMs: 600, // slow and heavy
   },
-  // Guns: a quick tap shoots whatever is under the pointer. Damage is fixed
-  // (not speed based). Knockback pushes the hit part away from the shot.
-  // A tap is a press and release within this time and distance (world pixels).
-  tapMaxMs: 250,
-  tapMaxMove: 10,
-  // How close to a body part a shot can land and still hit (aim assist).
-  gunAimRadius: { mouse: 10, touch: 30 },
+  // Guns: press empty space to hold one; it aims at the dummy and fires while
+  // held. Bullets fly across the arena. A hit does fixed damage and knocks the
+  // part along the bullet's path, so steady fire juggles the dummy in the air.
+  bulletSpeed: 28, // pixels per physics step (about 1,700 per second)
   pistol: {
     price: 1500,
-    damage: 40, // small shots...
-    knockback: 4,
-    cooldownMs: 180, // ...fired fast
+    damage: 50, // small bullets...
+    knockback: 5,
+    cooldownMs: 120, // ...in a fast stream (about 8 a second)
   },
   revolver: {
     price: 3000,
-    damage: 130, // heavy shots...
-    knockback: 11,
-    cooldownMs: 700, // ...fired slowly
+    damage: 200, // huge bullets...
+    knockback: 18, // ...with a huge kick...
+    cooldownMs: 600, // ...fired slowly
   },
   spikesPrice: 3000,
 };
