@@ -24,23 +24,39 @@ export function pointsForHit(damage: number, multiplier: number, held: boolean):
   return Math.round(damage * multiplier);
 }
 
-/** Tracks how many hits landed in quick succession. */
+/** The source of a hit, for the variety combo: "throw" or a weapon's id. */
+export type HitSource = string;
+
+/**
+ * Tracks how many hits landed in quick succession, and which kinds of hit
+ * (throws, Bat, Pistol, ...) made them. Each extra kind raises the cap, so
+ * mixing weapons can push the combo past x5.
+ */
 export class Combo {
   count = 0;
   /** How long the player has to land the next hit. The combo upgrade raises this. */
   windowSeconds = CONFIG.comboWindowSeconds;
+  /** The different kinds of hit in the current combo. */
+  readonly sources = new Set<HitSource>();
   private timeSinceHit = Infinity;
 
-  /** Current score multiplier: 1, 1.25, 1.5, ... up to the max. */
+  /** The highest the multiplier can go right now: x5, plus 1 per extra kind of hit. */
+  get cap(): number {
+    const extraKinds = Math.max(0, this.sources.size - 1);
+    return Math.min(CONFIG.maxVarietyMultiplier, CONFIG.maxMultiplier + extraKinds);
+  }
+
+  /** Current score multiplier: 1, 1.25, 1.5, ... up to the cap. */
   get multiplier(): number {
     if (this.count <= 1) return 1;
-    return Math.min(CONFIG.maxMultiplier, 1 + CONFIG.comboStep * (this.count - 1));
+    return Math.min(this.cap, 1 + CONFIG.comboStep * (this.count - 1));
   }
 
   /** Call when a hit lands. Returns the multiplier for that hit. */
-  hit(): number {
-    if (this.timeSinceHit > this.windowSeconds) this.count = 0;
+  hit(source: HitSource = "throw"): number {
+    if (this.timeSinceHit > this.windowSeconds) this.breakCombo();
     this.count += 1;
+    this.sources.add(source);
     this.timeSinceHit = 0;
     return this.multiplier;
   }
@@ -48,11 +64,16 @@ export class Combo {
   /** Call every frame. Breaks the combo if the player paused too long. */
   update(dtSeconds: number): void {
     this.timeSinceHit += dtSeconds;
-    if (this.timeSinceHit > this.windowSeconds) this.count = 0;
+    if (this.timeSinceHit > this.windowSeconds) this.breakCombo();
   }
 
   reset(): void {
-    this.count = 0;
+    this.breakCombo();
     this.timeSinceHit = Infinity;
+  }
+
+  private breakCombo(): void {
+    this.count = 0;
+    this.sources.clear();
   }
 }

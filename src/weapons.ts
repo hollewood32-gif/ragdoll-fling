@@ -25,7 +25,7 @@ export interface WeaponInfo {
   id: WeaponId;
   name: string;
   kind: WeaponKind;
-  /** Number key that selects it (none for passive weapons). */
+  /** Number key that selects it: 1-9, or 0 for the tenth. Null for passive weapons and those past the tenth (picked with the wheel, Q/E or the bar). */
   key: number | null;
   /** Price to buy level 1. 0 means everyone owns it from the start. */
   price: number;
@@ -163,9 +163,9 @@ export function buyWeapon(
   return { levels: { ...levels, [id]: levels[id] + 1 }, coins: coins - price };
 }
 
-/** Weapons the player can select with keys or the weapon bar, in key order. */
+/** Weapons the player can select (everything owned except passive ones), in list order. */
 export function selectableWeapons(levels: WeaponLevels): WeaponInfo[] {
-  return WEAPONS.filter((w) => w.key !== null && levels[w.id] > 0);
+  return WEAPONS.filter((w) => w.kind !== "passive" && levels[w.id] > 0);
 }
 
 // ---------------------------------------------------------------------------

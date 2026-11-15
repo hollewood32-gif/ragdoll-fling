@@ -7,7 +7,7 @@ import { getBrowserStorage, loadBestScore, PURE_STORAGE_KEY, recordScore } from 
 import { coinsForScore, loadCoins, saveCoins } from "./coins";
 import { GRAB_RADIUS, pickPart } from "./grab";
 import { createRagdoll, wholeBodySpeed, type Ragdoll } from "./ragdoll";
-import { Combo, damageFromSpeed, pointsForHit } from "./scoring";
+import { Combo, damageFromSpeed, pointsForHit, type HitSource } from "./scoring";
 import { loadMuted, saveMuted, Sound } from "./sound";
 import {
   buyUpgrade,
@@ -514,7 +514,7 @@ Events.on(engine, "collisionStart", (event) => {
       // Only the speed straight INTO the wall counts, not sliding along it.
       const impactSpeed = Math.abs(Vector.dot(part.velocity, pair.collision.normal));
       const damage = damageFromSpeed(impactSpeed) * spikesMultiplier(activeWeapons.spikes);
-      registerHit(part, damage, CONFIG.hitCooldownMs, wallSparkOrigin(part));
+      registerHit(part, damage, CONFIG.hitCooldownMs, wallSparkOrigin(part), "throw");
     } else if (hitBy.label === "weapon" && held) {
       const contact = pair.collision.supports?.[0] ?? held.body.position;
       swingHit(part, held, pair.collision.normal, { x: contact.x, y: contact.y });
@@ -537,12 +537,13 @@ function swingHit(part: Matter.Body, weapon: HeldWeapon, normal: Matter.Vector, 
   const damage = damageFromSpeed(swingSpeed) * hitStats.damage * power;
   // Sparks and knockback go the way the weapon was moving.
   const direction = Vector.normalise(weaponVelocity);
-  const landed = registerHit(part, damage, CONFIG.hitCooldownMs, {
-    x: contact.x,
-    y: contact.y,
-    nx: direction.x,
-    ny: direction.y,
-  });
+  const landed = registerHit(
+    part,
+    damage,
+    CONFIG.hitCooldownMs,
+    { x: contact.x, y: contact.y, nx: direction.x, ny: direction.y },
+    weapon.id,
+  );
   if (!landed) return;
   lastSwingHitAt = engine.timing.timestamp;
   weaponUsed = true; // this round no longer counts for Pure best
@@ -699,7 +700,7 @@ function bulletHit(part: Matter.Body, bullet: Bullet): void {
   if (!gun || phase !== "playing") return;
   const dir = Vector.normalise({ x: bullet.vx, y: bullet.vy });
   const power = weaponPower(activeWeapons[bullet.id]);
-  const landed = registerHit(part, gun.damage * power, 0, { x: bullet.x, y: bullet.y, nx: dir.x, ny: dir.y });
+  const landed = registerHit(part, gun.damage * power, 0, { x: bullet.x, y: bullet.y, nx: dir.x, ny: dir.y }, bullet.id);
   if (!landed) return;
   weaponUsed = true; // this round no longer counts for Pure best
   // Knock the part along the bullet's path, plus a little lift to keep it airborne.
@@ -787,14 +788,14 @@ function updateBombs(dt: number): void {
     const at = { x, y };
     if (bomb.kind === "bomblet") {
       const c = CONFIG.cluster;
-      explode(at, c.bombletBlastRadius, c.bombletDamage, c.bombletKnockback, bomb.power, false);
+      explode(at, c.bombletBlastRadius, c.bombletDamage, c.bombletKnockback, bomb.power, false, "cluster");
     } else if (bomb.kind === "cluster") {
       const c = CONFIG.cluster;
-      explode(at, c.blastRadius, c.damage, c.knockback, bomb.power, true);
+      explode(at, c.blastRadius, c.damage, c.knockback, bomb.power, true, "cluster");
       scatterBomblets(at, bomb.power);
     } else {
       const g = CONFIG.grenade;
-      explode(at, g.blastRadius, g.damage, g.knockback, bomb.power, true);
+      explode(at, g.blastRadius, g.damage, g.knockback, bomb.power, true, "grenade");
     }
   }
 }
@@ -830,6 +831,7 @@ function explode(
   knockback: number,
   power: number,
   big: boolean,
+  source: HitSource, // which weapon, for the variety combo
 ): void {
   blasts.push({ x: at.x, y: at.y, radius, life: BLAST_SECONDS });
   shake = Math.max(shake, (big ? 16 : 8) * shakeScale());
@@ -856,7 +858,7 @@ function explode(
     Body.setVelocity(part, Vector.add(part.velocity, push));
   }
 
-  if (nearest && registerHit(nearest, total, 0, { x: at.x, y: at.y, nx: 0, ny: -1 })) {
+  if (nearest && registerHit(nearest, total, 0, { x: at.x, y: at.y, nx: 0, ny: -1 }, source)) {
     weaponUsed = true; // this round no longer counts for Pure best
   }
 }
@@ -890,7 +892,7 @@ function cannonballHit(part: Matter.Body, ball: Matter.Body, normal: Matter.Vect
   const damage = damageFromSpeed(impactSpeed) * CONFIG.cannon.damage * power;
   const direction = Vector.magnitude(ball.velocity) > 0.5 ? Vector.normalise(ball.velocity) : { x: 0, y: -1 };
   const origin = { x: ball.position.x, y: ball.position.y, nx: direction.x, ny: direction.y };
-  if (!registerHit(part, damage, CONFIG.hitCooldownMs, origin)) return;
+  if (!registerHit(part, damage, CONFIG.hitCooldownMs, origin, "cannon")) return;
   weaponUsed = true;
   Body.setVelocity(part, Vector.add(part.velocity, Vector.mult(direction, CONFIG.cannon.knockback * power)));
 }
@@ -920,7 +922,7 @@ function updateProjectiles(dt: number): void {
     const hitWall = to.x < 0 || to.x > W || to.y < 0 || to.y > H;
     if (hitDummy || hitWall) {
       const at = { x: Math.min(W, Math.max(0, to.x)), y: Math.min(H, Math.max(0, to.y)) };
-      explode(at, r.blastRadius, r.damage, r.knockback, weaponPower(activeWeapons.rpg), true);
+      explode(at, r.blastRadius, r.damage, r.knockback, weaponPower(activeWeapons.rpg), true, "rpg");
       rockets.splice(i, 1);
       continue;
     }
@@ -988,7 +990,13 @@ interface SparkOrigin {
  * Scores one hit. `rawDamage` is before upgrades; hits on the same part closer
  * together than `cooldownMs` are ignored. Returns true if it scored.
  */
-function registerHit(part: Matter.Body, rawDamage: number, cooldownMs: number, origin: SparkOrigin): boolean {
+function registerHit(
+  part: Matter.Body,
+  rawDamage: number,
+  cooldownMs: number,
+  origin: SparkOrigin,
+  source: HitSource,
+): boolean {
   const now = engine.timing.timestamp;
   const last = lastHitAt.get(part) ?? -Infinity;
   if (now - last < cooldownMs) return false;
@@ -1000,7 +1008,7 @@ function registerHit(part: Matter.Body, rawDamage: number, cooldownMs: number, o
   // Hits while the ragdoll is still held are worth less and don't build the combo.
   const whileHeld = grab !== null;
   // Sandbox has no combo, so its damage numbers show each hit on its own.
-  const multiplier = whileHeld || mode === "sandbox" ? 1 : combo.hit();
+  const multiplier = whileHeld || mode === "sandbox" ? 1 : combo.hit(source);
   const points = pointsForHit(damage, multiplier, whileHeld);
   score += points;
   stats.recordHit(points, multiplier);
@@ -1413,8 +1421,28 @@ function weaponRows(): HTMLLIElement[] {
 // ---------------------------------------------------------------------------
 // Weapon bar and the 1-9 keys
 // ---------------------------------------------------------------------------
+// Mouse wheel or Q / E: step to the next or previous owned weapon, wrapping around.
+function cycleWeapon(step: number): void {
+  const options = selectableWeapons(activeWeapons);
+  if (options.length < 2) return;
+  const index = options.findIndex((w) => w.id === selectedWeapon);
+  const next = options[(index + step + options.length) % options.length];
+  selectWeapon(next.id);
+}
+
+// The wheel only switches weapons during a round, and then it does not scroll the page.
+canvas.addEventListener(
+  "wheel",
+  (e) => {
+    if (phase !== "ready" && phase !== "playing") return;
+    e.preventDefault();
+    cycleWeapon(e.deltaY > 0 ? 1 : -1);
+  },
+  { passive: false },
+);
+
 function selectWeapon(id: WeaponId): void {
-  if (activeWeapons[id] <= 0 || weaponInfo(id).key === null) return;
+  if (activeWeapons[id] <= 0 || weaponInfo(id).kind === "passive") return;
   if (id !== selectedWeapon) {
     putAwayWeapon(); // let go of the old one; press again to use the new one
     sound.click();
@@ -1442,7 +1470,7 @@ function renderWeaponBar(): void {
       const button = document.createElement("button");
       const key = document.createElement("span");
       key.className = "key";
-      key.textContent = String(weapon.key);
+      key.textContent = weapon.key === null ? "" : String(weapon.key);
       button.append(key, weapon.name);
       button.setAttribute("aria-pressed", String(weapon.id === selectedWeapon));
       button.addEventListener("click", () => selectWeapon(weapon.id));
@@ -1501,10 +1529,14 @@ window.addEventListener("keydown", (e) => {
   if (e.target instanceof HTMLInputElement) return;
   if (e.key === "m" || e.key === "M") toggleMute();
   if (e.key === "Escape") exitSandbox();
-  // Number keys pick a weapon during a round.
-  if (/^[1-9]$/.test(e.key) && (phase === "ready" || phase === "playing")) {
-    const weapon = WEAPONS.find((w) => w.key === Number(e.key));
-    if (weapon) selectWeapon(weapon.id);
+  // During a round: number keys pick a weapon directly, Q and E cycle through them.
+  if (phase === "ready" || phase === "playing") {
+    if (/^[0-9]$/.test(e.key)) {
+      const weapon = WEAPONS.find((w) => w.key === Number(e.key));
+      if (weapon) selectWeapon(weapon.id);
+    }
+    if (e.key === "q" || e.key === "Q") cycleWeapon(-1);
+    if (e.key === "e" || e.key === "E") cycleWeapon(1);
   }
 });
 updateSoundToggle();
@@ -1724,7 +1756,10 @@ function drawHud(): void {
   if (combo.count > 1) {
     ctx.textAlign = "center";
     ctx.fillStyle = "#06d6a0";
-    ctx.fillText(`COMBO x${combo.multiplier.toFixed(2)}`, W / 2, 24);
+    // With two or more kinds of hit in the combo, show how many (they raise the cap).
+    const kinds = combo.sources.size;
+    const label = kinds > 1 ? `COMBO x${combo.multiplier.toFixed(2)} · ${kinds} weapons` : `COMBO x${combo.multiplier.toFixed(2)}`;
+    ctx.fillText(label, W / 2, 24);
   }
 
   drawReadyHint();
