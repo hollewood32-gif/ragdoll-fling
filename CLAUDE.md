@@ -130,6 +130,13 @@ Original game, inspired by the *feel* of old ragdoll sandbox toys, not a copy of
 - **Art and sound:** shapes and sounds made in code, like the rest of the game.
 - All numbers (damage, knockback, cooldowns, prices) live in `config.ts` and get tuned after playtesting.
 
+### Game modes and display settings (added 2026-11-15, PR #29)
+
+- **Timed** (the Play button): the normal game. Scored, earns coins, records Best / Pure best.
+- **Sandbox** (the Sandbox button): no timer, no score, no combo, no coins, no best scores. Every weapon and spiked walls are unlocked in Sandbox only (owned levels kept; purchases untouched). Leave with Esc or the Exit button. Rules in `src/modes.ts`; `mode` in `main.ts` decides whether the timer runs and which HUD is drawn.
+- **Numbers: On/Off** (menu switch): floating damage numbers in every mode, remembered as `ragdoll-fling:damage-numbers`.
+- Menu rows: Play | Sandbox, then Shop | Leaderboard, then the switches (Upgrades, Sound, Numbers).
+
 ## Notes for future sessions
 
 - Read this file first. Check the status checkboxes above to see where we left off, and update them as phases finish.
