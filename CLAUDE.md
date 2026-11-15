@@ -98,6 +98,34 @@ Original game, inspired by the *feel* of old ragdoll sandbox toys, not a copy of
 - **API token:** needs Account → D1 → Edit in addition to the Workers permissions.
 - **Local testing:** `npx wrangler d1 migrations apply DB --local --env staging`, then `wrangler dev --env staging` serves the game and API on http://localhost:8787.
 
+9. [ ] Weapons. In progress, as five PRs:
+   - [x] PR: save the design below.
+   - [ ] PR: shop tabs (Upgrades | Weapons), buying and levelling, weapon bar and 1-9 keys, the Fist, spiked walls.
+   - [ ] PR: Bat and Axe.
+   - [ ] PR: Pistol and Revolver.
+   - [ ] PR: Grenade, Cluster bomb, Cannon and RPG.
+
+### Weapons design (approved 2026-11-14)
+
+- **Controls:** drag still grabs and throws. A tap or click (press and release without moving) uses the selected weapon at that spot. Switch with keys 1-9 or by tapping the weapon bar along the bottom of the arena (phones have no number keys).
+- **Cooldowns:** each weapon has one, so click spam can't break scoring. The weapon bar shows when each is ready.
+- **Scoring:** weapon hits deal damage directly and build the combo. Their knockback sets up wall hits.
+- **Weapons** (key, how it works, buy price):
+  1. Fist: tap the ragdoll, light punch. Free, owned from the start.
+  2. Bat: tap the ragdoll, medium damage, huge knockback. 1,000.
+  3. Axe: tap the ragdoll, big damage, little knockback. 2,000.
+  4. Pistol: tap anywhere, fast small shots. 1,500.
+  5. Revolver: tap anywhere, slow heavy shots. 3,000.
+  6. Grenade: tap to throw it there, explodes after 1 s. 2,500.
+  7. Cluster bomb: like the grenade, then splits into 4 smaller blasts. 5,000.
+  8. Cannon: fires a heavy ball from the nearest wall toward the tap. 4,000.
+  9. RPG: fires a rocket from the nearest wall that explodes on contact. 7,500.
+  - Spiked walls (no key, passive): every wall hit does +25% damage. 3,000.
+- **Levels:** buying gives level 1. Four more levels each add +15% damage and knockback (spiked walls: +10% per level). Level-up prices are 0.5x, 1x, 1.5x and 2x the buy price.
+- **Pure best:** the Upgrades Off switch also disables every weapon, the Fist included, so Pure rounds and the leaderboard stay throws-only.
+- **Art and sound:** shapes and sounds made in code, like the rest of the game (tracer lines, blast circles, a rocket with a trail).
+- All numbers (damage, knockback, cooldowns, prices) live in `config.ts` and get tuned after playtesting.
+
 ## Notes for future sessions
 
 - Read this file first. Check the status checkboxes above to see where we left off, and update them as phases finish.
