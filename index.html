@@ -51,6 +51,7 @@
         <div class="buttons">
           <button id="menu-shop" class="secondary">Shop</button>
           <button id="menu-leaderboard" class="secondary">Leaderboard</button>
+          <button id="menu-loadout" class="secondary">Loadout</button>
         </div>
         <!-- Switches, remembered on this device -->
         <div class="buttons toggles">
@@ -107,6 +108,17 @@
         <ol id="board-list" class="board-list"></ol>
         <p id="board-status" class="board-status" role="status"></p>
         <button id="board-back" class="secondary">Back</button>
+      </div>
+
+      <!-- Loadout: choose the order of weapons on the bar (and their keys). Rows are built in code. -->
+      <div id="loadout" class="overlay" hidden>
+        <h1>Loadout</h1>
+        <p class="shop-note">Your order sets the weapon bar, Q/E and the keys: your first owned weapon is 1, the tenth is 0.</p>
+        <ol id="loadout-list" class="shop-list loadout-list"></ol>
+        <div class="buttons">
+          <button id="loadout-reset" class="secondary">Reset to default</button>
+          <button id="loadout-back" class="secondary">Back</button>
+        </div>
       </div>
 
       <!-- Shop. Rows are built in code from the UPGRADES list in src/upgrades.ts. -->

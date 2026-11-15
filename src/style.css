@@ -533,7 +533,33 @@ canvas:active {
   }
 }
 
-/* Safety net: if the shop is ever taller than the arena, scroll instead of cutting it off. */
+/* Loadout: a compact list with up/down buttons on each row */
+.overlay .loadout-list {
+  gap: 0.7cqh;
+}
+
+.overlay .loadout-list .shop-item {
+  padding: 0.6cqh 2cqh;
+}
+
+.overlay .loadout-list .not-owned strong {
+  color: #778;
+}
+
+.overlay .loadout-list .move {
+  display: flex;
+  gap: 1cqh;
+}
+
+.overlay .loadout-list .move button {
+  min-width: 0;
+  min-height: 30px;
+  padding: 0.5cqh 2cqh;
+  font-size: clamp(11px, 2.4cqh, 15px);
+}
+
+/* Safety net: if the shop or loadout is ever taller than the arena, scroll instead of cutting it off. */
+#loadout,
 #shop {
   overflow-y: auto;
   justify-content: safe center;
