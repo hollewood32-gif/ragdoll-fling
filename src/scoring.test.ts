@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 import { CONFIG } from "./config";
-import { Combo, damageFromSpeed, pointsForHit } from "./scoring";
+import { Combo, damageFromSpeed, fadeFactor, pointsForHit } from "./scoring";
 
 describe("pointsForHit", () => {
   it("multiplies thrown hits by the combo", () => {
@@ -141,5 +141,41 @@ describe("variety combo", () => {
     const combo = new Combo();
     many(combo, 20, "bat");
     expect(combo.cap).toBe(CONFIG.maxMultiplier);
+  });
+});
+
+describe("combo fade", () => {
+  it("halves a weapon's combo step for every 2 seconds without switching", () => {
+    expect(fadeFactor(0, "bat")).toBe(1);
+    expect(fadeFactor(1.9, "bat")).toBe(1);
+    expect(fadeFactor(2, "bat")).toBe(0.5);
+    expect(fadeFactor(4.5, "bat")).toBe(0.25);
+  });
+
+  it("never fades throws, so Pure rounds don't change", () => {
+    expect(fadeFactor(10, "throw")).toBe(1);
+    const combo = new Combo();
+    combo.update(10); // a long time without switching
+    many(combo, 5, "throw");
+    expect(combo.multiplier).toBe(1 + 4 * CONFIG.comboStep);
+  });
+
+  it("makes weapon hits add less after 2 seconds on one weapon", () => {
+    const combo = new Combo();
+    combo.hit("bat"); // x1
+    combo.secondsOnWeapon = 2.5; // kept the bat 2.5 s
+    combo.hit("bat");
+    expect(combo.multiplier).toBe(1 + CONFIG.comboStep / 2);
+    expect(combo.fading).toBe(true);
+  });
+
+  it("goes back to full steps after switching weapon", () => {
+    const combo = new Combo();
+    combo.hit("bat");
+    combo.secondsOnWeapon = 5;
+    combo.weaponSwitched();
+    combo.hit("pistol");
+    expect(combo.multiplier).toBe(1 + CONFIG.comboStep);
+    expect(combo.fading).toBe(false);
   });
 });

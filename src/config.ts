@@ -31,6 +31,9 @@ export const CONFIG = {
   // Variety combo: each extra weapon type used in the current combo raises
   // the cap by 1 (throws only stay at maxMultiplier), up to this.
   maxVarietyMultiplier: 10,
+  // Combo fade: for every this-many seconds on the same weapon without
+  // switching, each weapon hit adds half as much to the combo. Throws never fade.
+  comboFadeSeconds: 2,
 
   // The same body part can't score again until this many milliseconds pass.
   hitCooldownMs: 120,

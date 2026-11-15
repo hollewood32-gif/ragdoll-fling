@@ -28,9 +28,20 @@ export function pointsForHit(damage: number, multiplier: number, held: boolean):
 export type HitSource = string;
 
 /**
- * Tracks how many hits landed in quick succession, and which kinds of hit
- * (throws, Bat, Pistol, ...) made them. Each extra kind raises the cap, so
- * mixing weapons can push the combo past x5.
+ * How much of a normal combo step a weapon hit adds after this long on the
+ * same weapon: full for the first 2 seconds, then half, a quarter, ...
+ * Throws always add a full step.
+ */
+export function fadeFactor(secondsOnWeapon: number, source: HitSource): number {
+  if (source === "throw") return 1;
+  return 0.5 ** Math.floor(Math.max(0, secondsOnWeapon) / CONFIG.comboFadeSeconds);
+}
+
+/**
+ * Tracks the combo: how many hits landed in quick succession, which kinds of
+ * hit (throws, Bat, Pistol, ...) made them, and how long the player has kept
+ * the same weapon. Each extra kind raises the cap, so mixing weapons can push
+ * the combo past x5; staying on one weapon makes each hit add less.
  */
 export class Combo {
   count = 0;
@@ -38,6 +49,10 @@ export class Combo {
   windowSeconds = CONFIG.comboWindowSeconds;
   /** The different kinds of hit in the current combo. */
   readonly sources = new Set<HitSource>();
+  /** Seconds since the player last switched weapon (drives the fade). */
+  secondsOnWeapon = 0;
+  /** The combo before the cap: 1 on the first hit, then each hit adds a (possibly faded) step. */
+  private value = 1;
   private timeSinceHit = Infinity;
 
   /** The highest the multiplier can go right now: x5, plus 1 per extra kind of hit. */
@@ -49,31 +64,48 @@ export class Combo {
   /** Current score multiplier: 1, 1.25, 1.5, ... up to the cap. */
   get multiplier(): number {
     if (this.count <= 1) return 1;
-    return Math.min(this.cap, 1 + CONFIG.comboStep * (this.count - 1));
+    return Math.min(this.cap, this.value);
+  }
+
+  /** True when weapon hits are currently adding less than a full step. */
+  get fading(): boolean {
+    return fadeFactor(this.secondsOnWeapon, "weapon") < 1;
   }
 
   /** Call when a hit lands. Returns the multiplier for that hit. */
   hit(source: HitSource = "throw"): number {
     if (this.timeSinceHit > this.windowSeconds) this.breakCombo();
     this.count += 1;
+    if (this.count > 1) {
+      const step = CONFIG.comboStep * fadeFactor(this.secondsOnWeapon, source);
+      this.value = Math.min(CONFIG.maxVarietyMultiplier, this.value + step);
+    }
     this.sources.add(source);
     this.timeSinceHit = 0;
     return this.multiplier;
   }
 
+  /** Call when the player switches weapon: the fade starts over. */
+  weaponSwitched(): void {
+    this.secondsOnWeapon = 0;
+  }
+
   /** Call every frame. Breaks the combo if the player paused too long. */
   update(dtSeconds: number): void {
     this.timeSinceHit += dtSeconds;
+    this.secondsOnWeapon += dtSeconds;
     if (this.timeSinceHit > this.windowSeconds) this.breakCombo();
   }
 
   reset(): void {
     this.breakCombo();
     this.timeSinceHit = Infinity;
+    this.secondsOnWeapon = 0;
   }
 
   private breakCombo(): void {
     this.count = 0;
+    this.value = 1;
     this.sources.clear();
   }
 }
